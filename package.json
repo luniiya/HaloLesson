@@ -1,0 +1,19 @@
+{
+  "name": "halolesson",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --parallel dev:server dev:web",
+    "dev:server": "bun run --filter @halolesson/server dev",
+    "dev:web": "bun run --filter @halolesson/web dev",
+    "build": "bun run --filter @halolesson/web build",
+    "check": "bun run --parallel check:server check:web",
+    "check:server": "bun run --filter @halolesson/server check",
+    "check:web": "bun run --filter @halolesson/web check",
+    "start": "bun run --filter @halolesson/server start"
+  }
+}
