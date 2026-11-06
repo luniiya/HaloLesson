@@ -64,7 +64,7 @@ Write unit tests for as much as you can, and keep them fast: test run time matte
 - Tests live in `server/test/<area>/*.test.ts` and run with `bun test`. Each area is a folder, so you only run the area you changed:
   `bun run test:<area>` from `server/` (for example `bun run test:agent`). Use `bun run test` for everything before committing.
 - Areas so far: `auth` (register, login, lockout, sessions), `account` (profile and password changes, deletion), `admin` (users, server settings),
-  `data` (import and export), `agent` (tokens, agent API, MCP), `practice` (attempts and mastery), `subjects`.
+  `data` (import and export), `agent` (tokens, agent API, MCP), `practice` (attempts and mastery), `subjects`, `stats` (statistics, level history).
   When you add an area, add its folder and a `test:<area>` script in `server/package.json`, and list it here.
 - `server/test/setup.ts` (preloaded via `bunfig.toml`) points `DATA_DIR` at a fresh temp directory, so tests never touch `data/`.
   Every run shares one database, so each test creates its own users with unique names instead of relying on global state.

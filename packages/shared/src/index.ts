@@ -302,6 +302,14 @@ export interface ExportStats {
   exerciseCount: number;
 }
 
+// One answer, kept in full backups for the statistics.
+export interface ExportAttempt {
+  at: string;
+  correct: boolean;
+  durationMs?: number | null;
+  masteryAfter?: number | null;
+}
+
 export interface ExportExercise {
   type: ExerciseType;
   prompt: string;
@@ -309,6 +317,8 @@ export interface ExportExercise {
   correctIndex?: number;
   answers?: string[];
   explanation: string;
+  // Full backups only.
+  attempts?: ExportAttempt[];
 }
 
 export interface ExportSkill {
@@ -323,6 +333,8 @@ export interface ExportSubject {
   type?: SubjectType;
   level?: number | null;
   notes?: string;
+  // Every rating over time (null = cleared), full backups only.
+  levelHistory?: Array<{ level: number | null; at: string }>;
   name: string;
   description: string;
   color: SubjectColor;
@@ -385,4 +397,79 @@ export interface CreatedAgentToken {
 export interface LibraryEvent {
   revision: number;
   subjectId: string | null;
+}
+
+// Statistics: one scope (everything, or one subject or tracker) over a range
+// of days. Day keys are YYYY-MM-DD in the viewer's time zone.
+export const STATS_RANGES = [7, 30, 90, 365] as const;
+
+export interface StatsDay {
+  date: string;
+  answered: number;
+  correct: number;
+  timeMs: number;
+  // Average mastery of the scope's skills at the end of the day, 0 to 1.
+  mastery: number;
+}
+
+export interface StatsTotals {
+  answered: number;
+  correct: number;
+  timeMs: number;
+  practiceDays: number;
+  // Streaks ignore the range: consecutive days with an answer, up to today.
+  currentStreak: number;
+  longestStreak: number;
+  skillCount: number;
+  skillsStarted: number;
+  skillsMastered: number;
+  ratings: number;
+  firstActivityAt: string | null;
+  lastActivityAt: string | null;
+}
+
+export interface StatsItem {
+  id: string;
+  type: SubjectType;
+  name: string;
+  color: SubjectColor;
+  icon: SubjectIcon | null;
+  level: number | null;
+  // The rating in force when the range began (null if unrated then).
+  levelAtStart: number | null;
+  answered: number;
+  correct: number;
+  timeMs: number;
+  skillCount: number;
+  completedCount: number;
+  mastery: number;
+  lastActivityAt: string | null;
+}
+
+export interface StatsSkill {
+  id: string;
+  title: string;
+  unitTitle: string;
+  stars: number;
+  mastery: number;
+  answered: number;
+  correct: number;
+  timeMs: number;
+  lastPracticedAt: string | null;
+}
+
+export interface Stats {
+  subjectId: string | null;
+  days: number | null;
+  from: string;
+  to: string;
+  totals: StatsTotals;
+  daily: StatsDay[];
+  // Answers by weekday (0 = Monday) and hour of day, within the range.
+  weekdays: number[];
+  hours: number[];
+  // Rating changes in the range, plus the rating in force at its start.
+  levels: Array<{ subjectId: string; level: number | null; at: string }>;
+  items: StatsItem[];
+  skills: StatsSkill[];
 }

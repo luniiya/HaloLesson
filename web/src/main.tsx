@@ -9,6 +9,9 @@ import PracticePage from "./routes/PracticePage";
 import SharedPage from "./routes/SharedPage";
 import ShelfPage from "./routes/ShelfPage";
 import SubjectPage from "./routes/SubjectPage";
+import StatsPage from "./routes/StatsPage";
+import AgentPage from "./routes/AgentPage";
+import AccountPage from "./routes/AccountPage";
 import SubjectsPage from "./routes/SubjectsPage";
 import AccountSettings from "./routes/settings/AccountSettings";
 import AppearanceSettings from "./routes/settings/AppearanceSettings";
@@ -23,6 +26,11 @@ applyAccent(cachedAccent());
 applySecondary(cachedSecondary());
 initTheme();
 
+// Installable app (PWA). Only in builds: in dev the worker would cache Vite's modules.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
@@ -33,6 +41,9 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/setup" element={<AuthPage />} />
           <Route element={<AppLayout />}>
             <Route index element={<SubjectsPage />} />
+            <Route path="/stats" element={<StatsPage />} />
+            <Route path="/agent" element={<AgentPage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="/archive" element={<ShelfPage key="archive" view="archived" />} />
             <Route path="/trash" element={<ShelfPage key="trash" view="trashed" />} />
             <Route path="/subjects/:subjectId" element={<SubjectPage />} />

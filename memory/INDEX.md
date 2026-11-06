@@ -32,3 +32,6 @@
 - [Dark mode](halolesson/dark-mode.md) — Auto/Light/Dark in Appearance, default Auto, recoral mechanism, Duolingo dark palette
 - [Subject icon picker](halolesson/subject-icon-picker.md) — create-subject form needs an icon choice
 - [Outside tracker idea](halolesson/outside-tracker-idea.md) — brainstorm: orbit item that tracks learning done outside the app
+- [Statistics](halolesson/statistics.md) — Stats tab, level history + per-attempt time/mastery stored, shared getStats for web and agents
+- [Agent tab](halolesson/agent-tab.md) — Connect agent is a /agent tab, not a popup
+- [PWA](halolesson/pwa.md) — installable: manifest, icons, sw.js (API never cached), prod-only registration

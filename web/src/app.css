@@ -1058,3 +1058,105 @@
 }
 }
 
+
+/* Statistics charts. Marks are thin; text wears text colors, never series colors. */
+:root { --chart-gold: #d99a00; }
+:root.dark { --chart-gold: #dba400; }
+
+@layer components {
+  .stats-card {
+    @apply min-w-0 rounded-2xl border-2 border-swan bg-surface p-5 sm:p-6;
+  }
+
+  /* Duolingo profile style stat tiles: icon, big number, quiet label. */
+  .stat-tile {
+    @apply flex min-w-0 items-center gap-3 rounded-2xl border-2 border-swan bg-surface px-4 py-3.5;
+  }
+  .stat-tile-value {
+    @apply truncate text-xl font-black leading-tight text-ink;
+  }
+  .stat-tile-label {
+    @apply truncate text-xs font-bold text-wolf;
+  }
+
+  .stats-range {
+    @apply flex rounded-xl border-2 border-swan bg-surface p-1;
+  }
+  .stats-range button {
+    @apply rounded-lg px-3 py-1.5 text-xs font-black uppercase tracking-wide text-wolf transition-colors hover:bg-eel hover:text-ink;
+  }
+  .stats-range button[aria-pressed="true"] {
+    @apply bg-secondary-pale text-secondary hover:bg-secondary-pale hover:text-secondary;
+  }
+
+  .stats-switch {
+    @apply flex shrink-0 rounded-xl border-2 border-swan p-0.5;
+  }
+  .stats-switch button {
+    @apply rounded-lg px-2.5 py-1 text-xs font-extrabold text-wolf hover:text-ink;
+  }
+  .stats-switch button[aria-pressed="true"] {
+    @apply bg-eel text-ink;
+  }
+
+  .stats-table {
+    @apply w-full text-left text-sm;
+  }
+  .stats-table th {
+    @apply sticky top-0 bg-eel px-3 py-2 text-xs font-black uppercase tracking-wide text-wolf;
+  }
+  .stats-table td {
+    @apply border-t-2 border-swan px-3 py-2 font-semibold text-ink;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chart-grid { stroke: var(--color-swan); stroke-width: 1; shape-rendering: crispEdges; }
+  .chart-baseline { stroke: var(--color-hare); stroke-width: 1; shape-rendering: crispEdges; }
+  .chart-crosshair { stroke: var(--color-hare); stroke-width: 1; }
+  .chart-hover-band { fill: var(--color-eel); }
+  .chart-axis { fill: var(--color-wolf); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chart-value { fill: var(--color-ink); font-size: 12px; font-weight: 900; }
+  .chart-dot { stroke: var(--color-surface); stroke-width: 2; transition: r 0.12s; }
+
+  .chart-tooltip {
+    @apply pointer-events-none absolute z-10 flex min-w-32 flex-col gap-1 rounded-xl border-2 border-swan bg-surface px-3 py-2 text-xs shadow-[0_3px_0_var(--color-swan)];
+  }
+  .chart-tooltip-title {
+    @apply font-extrabold text-wolf;
+  }
+  .chart-key-line { @apply inline-block h-0.5 w-3 shrink-0 rounded-full; }
+  .chart-key-box { @apply inline-block size-2.5 shrink-0 rounded-[3px]; }
+
+  /* Calendar steps: one hue, surface to full accent. */
+  .chart-heat { transition: opacity 0.12s; }
+  .chart-heat-hover { stroke: var(--color-ink); stroke-width: 1.5; }
+  .chart-heat-0 { fill: var(--color-eel); background: var(--color-eel); }
+  .chart-heat-1 { fill: color-mix(in oklab, var(--accent) 30%, var(--color-surface)); background: color-mix(in oklab, var(--accent) 30%, var(--color-surface)); }
+  .chart-heat-2 { fill: color-mix(in oklab, var(--accent) 55%, var(--color-surface)); background: color-mix(in oklab, var(--accent) 55%, var(--color-surface)); }
+  .chart-heat-3 { fill: color-mix(in oklab, var(--accent) 80%, var(--color-surface)); background: color-mix(in oklab, var(--accent) 80%, var(--color-surface)); }
+  .chart-heat-4 { fill: var(--accent); background: var(--accent); }
+  .chart-heat-key { @apply inline-block size-3 rounded-[3px]; }
+}
+
+@layer components {
+  .mobile-tab {
+    @apply flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] font-black uppercase tracking-wide text-wolf;
+  }
+  .mobile-tab-icon {
+    @apply flex h-8 w-14 items-center justify-center rounded-full border-2 border-transparent transition-colors;
+  }
+  .mobile-tab-active {
+    @apply text-secondary;
+  }
+  .mobile-tab-active .mobile-tab-icon {
+    @apply border-secondary bg-secondary-pale;
+  }
+
+  /* Account page rows: big tap targets, Duolingo card style. */
+  .account-row {
+    @apply flex items-center gap-4 rounded-2xl border-2 border-swan bg-surface px-4 py-3.5 text-base font-extrabold text-ink shadow-[0_2px_0_var(--color-swan)] transition-colors hover:bg-eel active:translate-y-0.5 active:shadow-none;
+  }
+  .account-row-icon {
+    @apply grid size-10 shrink-0 place-items-center rounded-xl text-white;
+  }
+}

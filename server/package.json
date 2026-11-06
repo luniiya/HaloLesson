@@ -14,7 +14,8 @@
     "test:data": "bun test test/data",
     "test:agent": "bun test test/agent",
     "test:practice": "bun test test/practice",
-    "test:subjects": "bun test test/subjects"
+    "test:subjects": "bun test test/subjects",
+    "test:stats": "bun test test/stats"
   },
   "dependencies": {
     "@halolesson/shared": "workspace:*",

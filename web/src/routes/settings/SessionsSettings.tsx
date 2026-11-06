@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router";
 import { IconDeviceDesktop, IconDeviceMobile, IconPlugConnected, IconRobot } from "@tabler/icons-react";
 import type { AgentToken, SessionSummary } from "@halolesson/shared";
 import { api } from "$lib/api";
 import { formatDate, formatRelative } from "$lib/server";
 import Button from "../../components/Button";
-import AgentPromptDialog from "../../components/AgentPromptDialog";
 import ConfirmDialog from "../../components/ConfirmDialog";
 
 function AgentTokensCard() {
   const [tokens, setTokens] = useState<AgentToken[] | null>(null);
   const [error, setError] = useState("");
-  const [connecting, setConnecting] = useState(false);
   const [revoking, setRevoking] = useState<AgentToken | null>(null);
 
   const load = useCallback(() => {
@@ -27,7 +26,7 @@ function AgentTokensCard() {
           <h2 className="settings-card-title">Agent tokens</h2>
           <p className="settings-card-hint">Each agent prompt you copy carries its own token with full access to your lessons. They don't expire; revoke any you no longer use.</p>
         </div>
-        <Button variant="secondary" className="shrink-0 gap-2" onClick={() => setConnecting(true)}><IconPlugConnected size={19} />Connect agent</Button>
+        <Link to="/agent" className="button button-secondary shrink-0 gap-2"><IconPlugConnected size={19} />Connect agent</Link>
       </div>
       {error && <p role="alert" className="notice-error mt-4">{error}</p>}
       {!tokens && !error && <div className="mt-5 h-24 animate-pulse rounded-xl bg-eel" aria-label="Loading agent tokens" />}
@@ -51,7 +50,6 @@ function AgentTokensCard() {
           ))}
         </ul>
       )}
-      {connecting && <AgentPromptDialog onClose={() => { setConnecting(false); load(); }} />}
       {revoking && (
         <ConfirmDialog
           title={`Revoke "${revoking.name}"?`}

@@ -116,9 +116,15 @@ export default function SubjectsPage() {
               center={<BookArtwork className="w-40 sm:w-48" />}
             />
           </div>
-          <p className="mt-6 text-center text-xs font-extrabold uppercase tracking-wider text-wolf">
+          {/* One line always: the less important hints drop out as the room shrinks. */}
+          <p className="@container mt-6 overflow-hidden text-ellipsis whitespace-nowrap text-center text-xs font-extrabold uppercase tracking-wider text-wolf">
             {editing
-              ? "Click to customize · + opens a folder · drag to reorder · drop on a folder, Archive or Trash"
+              ? <>
+                  Click to customize
+                  <span className="hidden @3xl:inline"> · + opens a folder</span>
+                  <span className="hidden @xs:inline"> · drag to reorder</span>
+                  <span className="hidden @2xl:inline"> · drop on a folder, Archive or Trash</span>
+                </>
               : <>{subjects.length} {subjects.length === 1 ? "subject" : "subjects"}<span className="mx-2 text-swan">•</span>{skillCount} {skillCount === 1 ? "skill" : "skills"}</>}
           </p>
         </section>

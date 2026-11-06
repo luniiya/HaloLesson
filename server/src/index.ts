@@ -21,13 +21,14 @@ import {
   userFromRequest,
 } from "./auth";
 import { handleMcp } from "./agent/mcp";
-import { AgentError, commit, readLibrary, readProgress, readSubject, report } from "./agent/ops";
+import { AgentError, commit, readLibrary, readProgress, readStats, readSubject, report } from "./agent/ops";
 import { buildAgentPrompt, buildAgentSpec } from "./agent/prompt";
 import { agentFromRequest, createAgentToken, listAgentTokens, RateLimitError, revokeAgentToken, type AgentAuth } from "./agent/tokens";
 import { buildExport, getExportStats, importSubjects, parseImport } from "./dataExport";
 import { eventStream, libraryChanged } from "./events";
 import { getPracticeSession, submitAttempt } from "./practice";
 import { getSettings, updateSettings } from "./settings";
+import { checkStatsOptions, getStats } from "./stats";
 import { copySharedSubject, createShareLink, getShareLink, getSharedSubject, revokeShareLink } from "./shares";
 import { createFolder, getLibrary, moveItem, purgeTrash, restoreItem, setArchived, trashItem, updateFolder } from "./library";
 import { createSubject, getSubject, listSubjects, updateSubject } from "./subjects";
@@ -382,6 +383,10 @@ const server = Bun.serve({
     "/api/agent/library": (req) => agentRoute(req, (auth) => readLibrary(auth.user.id)),
     "/api/agent/subjects/:id": (req) => agentRoute(req, (auth) => readSubject(auth.user.id, req.params.id)),
     "/api/agent/progress": (req) => agentRoute(req, (auth) => readProgress(auth.user.id, new URL(req.url).searchParams.get("subjectId") || undefined)),
+    "/api/agent/stats": (req) => agentRoute(req, (auth) => {
+      const params = new URL(req.url).searchParams;
+      return readStats(auth.user.id, { subjectId: params.get("subjectId"), days: params.get("days"), tzOffset: params.get("tzOffset") });
+    }),
     "/api/agent/commits": {
       POST: (req) => agentRoute(req, async (auth) => commit(auth.user.id, await req.json())),
     },
@@ -536,11 +541,19 @@ const server = Bun.serve({
         return errorResponse(error);
       }
     },
+    "/api/stats": (req) => {
+      try {
+        const params = new URL(req.url).searchParams;
+        return Response.json(getStats(requireUser(req).id, checkStatsOptions({ subjectId: params.get("subjectId"), days: params.get("days"), tzOffset: params.get("tzOffset") })));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
     "/api/exercises/:id/attempt": {
       POST: async (req) => {
         try {
           const input = await body(req);
-          return Response.json(submitAttempt(requireUser(req).id, req.params.id, input.answer));
+          return Response.json(submitAttempt(requireUser(req).id, req.params.id, input.answer, input.durationMs));
         } catch (error) {
           return errorResponse(error);
         }

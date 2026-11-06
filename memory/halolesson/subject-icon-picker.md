@@ -11,3 +11,5 @@ agent create op able to set it too, per [[feature-parity-rule]]).
 Related: [[library-organisation]]
 
 *(2026-11-06, done)* Icon picker (Auto + all SUBJECT_ICONS) added to CreateSubjectForm. Server POST /api/subjects and the agent op already accepted `icon`.
+
+*(as of 2026-11-07)* Bug fixed: Auto's no-keyword fallback was hashed from the name in the picker but from the subject id on the orbit, so the saved icon differed from the preview. Both now hash the name (`autoIcon(name, description)` in `web/src/lib/subjectIcons.ts`).

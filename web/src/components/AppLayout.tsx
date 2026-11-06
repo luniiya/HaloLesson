@@ -1,8 +1,7 @@
-import { useState } from "react";
+import type { ReactNode } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router";
-import { IconArchive, IconBook2, IconSettings, IconSparkles, IconTrash } from "@tabler/icons-react";
+import { IconArchive, IconBook2, IconChartBar, IconSettings, IconSparkles, IconTrash } from "@tabler/icons-react";
 import { useAuth } from "$lib/auth";
-import AgentPromptDialog from "./AgentPromptDialog";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
 
@@ -14,11 +13,23 @@ function SparkIcon() {
   return <IconSparkles className="size-6" aria-hidden="true" />;
 }
 
+// Pages reached from the Account tab, which stays lit on them.
+const ACCOUNT_PATHS = ["/account", "/settings", "/agent", "/archive", "/trash"];
+
+// Bottom bar tab: icon in a pill, label underneath.
+function MobileTab({ to, end, label, active, children }: { to: string; end?: boolean; label: string; active?: boolean; children: ReactNode }) {
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => `mobile-tab ${active ?? isActive ? "mobile-tab-active" : ""}`}>
+      <span className="mobile-tab-icon">{children}</span>
+      {label}
+    </NavLink>
+  );
+}
+
 const navClass = ({ isActive }: { isActive: boolean }) => `nav-item ${isActive ? "nav-item-active" : ""}`;
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
-  const [agentOpen, setAgentOpen] = useState(false);
   const location = useLocation();
   if (loading) {
     return <div className="grid min-h-dvh place-items-center bg-surface font-bold text-wolf">Loading your lessons…</div>;
@@ -32,7 +43,6 @@ export default function AppLayout() {
         <div className="flex items-center gap-1">
           <Link to="/archive" data-drop="archive" aria-label="Archive" className="nav-item p-2"><IconArchive className="size-6" aria-hidden="true" /></Link>
           <Link to="/trash" data-drop="trash" aria-label="Trash" className="nav-item p-2"><IconTrash className="size-6" aria-hidden="true" /></Link>
-          <Link to="/settings" aria-label="Settings" className="ml-1 rounded-full"><Avatar user={user} className="size-9 text-sm" /></Link>
         </div>
       </header>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r-2 border-swan bg-surface p-5 md:flex">
@@ -42,7 +52,14 @@ export default function AppLayout() {
             <BookIcon />
             Learn
           </NavLink>
-          <button type="button" className="nav-item text-left" onClick={() => setAgentOpen(true)}><SparkIcon />Connect agent</button>
+          <NavLink to="/stats" className={navClass}>
+            <IconChartBar className="size-6" aria-hidden="true" />
+            Statistics
+          </NavLink>
+          <NavLink to="/agent" className={navClass}>
+            <SparkIcon />
+            Connect agent
+          </NavLink>
           {/* data-drop: subjects dragged in Edit mode can be dropped here. */}
           <NavLink to="/archive" data-drop="archive" className={navClass}>
             <IconArchive className="size-6" aria-hidden="true" />
@@ -70,12 +87,12 @@ export default function AppLayout() {
       <main className="min-h-dvh md:ml-60">
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-20 flex h-16 items-center justify-around border-t-2 border-swan bg-surface md:hidden" aria-label="Mobile navigation">
-        <NavLink to="/" end className={({ isActive }) => `nav-item px-5 ${isActive ? "nav-item-active" : ""}`}><BookIcon /><span className="text-xs">Learn</span></NavLink>
-        <button type="button" className="nav-item px-5 text-xs" onClick={() => setAgentOpen(true)}><SparkIcon />Create</button>
-        <NavLink to="/settings" className={({ isActive }) => `nav-item px-5 ${isActive ? "nav-item-active" : ""}`}><IconSettings className="size-6" aria-hidden="true" /><span className="text-xs">Settings</span></NavLink>
+      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t-2 border-swan bg-surface pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="Mobile navigation">
+        <MobileTab to="/" end label="Learn"><BookIcon /></MobileTab>
+        <MobileTab to="/stats" label="Stats"><IconChartBar className="size-6" aria-hidden="true" /></MobileTab>
+        {/* Everything that doesn't fit the bar lives on the Account page. */}
+        <MobileTab to="/account" label="Account" active={ACCOUNT_PATHS.some((path) => location.pathname.startsWith(path))}><Avatar user={user} className="size-7 text-xs" /></MobileTab>
       </nav>
-      {agentOpen && <AgentPromptDialog onClose={() => setAgentOpen(false)} />}
     </div>
   );
 }

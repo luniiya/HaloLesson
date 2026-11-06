@@ -2,7 +2,7 @@ import { APP_VERSION, LEVEL_LABELS, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_ICONS }
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { AgentError, commit, readLibrary, readProgress, readSubject, report } from "./ops";
+import { AgentError, commit, readLibrary, readProgress, readStats, readSubject, report } from "./ops";
 import { agentFromRequest, RateLimitError, type AgentAuth } from "./tokens";
 
 const exerciseSchema = {
@@ -43,6 +43,19 @@ const tools = [
     description: "The learner's practiced skills (weakest first) and up to 30 recent wrong answers. Use it to target review.",
     inputSchema: { type: "object", properties: { subjectId: { type: "string", description: "Limit to one subject" } } },
     run: (auth: AgentAuth, args: Record<string, unknown>) => readProgress(auth.user.id, typeof args.subjectId === "string" ? args.subjectId : undefined),
+  },
+  {
+    name: "halo_get_stats",
+    description: "Practice and level statistics, the same numbers as the user's Statistics page: totals (answers, accuracy, time, streaks, skills mastered), a day-by-day series (answers, correct, time, average mastery), answers by weekday and hour, level ratings over time, and per-subject or per-skill breakdowns.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subjectId: { type: "string", description: "One subject or tracker; omit for everything not in the trash" },
+        days: { type: "number", enum: [7, 30, 90, 365], description: "Range ending today; omit for all time" },
+        tzOffset: { type: "number", description: "Minutes to add to local time to get UTC (JavaScript getTimezoneOffset). Default 0" },
+      },
+    },
+    run: (auth: AgentAuth, args: Record<string, unknown>) => readStats(auth.user.id, args),
   },
   {
     name: "halo_put_subject",

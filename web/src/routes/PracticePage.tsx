@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { IconStarFilled, IconX } from "@tabler/icons-react";
 import type { AttemptResult, PracticeSession } from "@halolesson/shared";
@@ -15,6 +15,9 @@ export default function PracticePage() {
   const [complete, setComplete] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // When the current exercise appeared, for the time-practiced statistic.
+  const shownAt = useRef(Date.now());
+  useEffect(() => { shownAt.current = Date.now(); }, [index, session]);
 
   useEffect(() => {
     let active = true;
@@ -30,7 +33,7 @@ export default function PracticePage() {
     setSubmitting(true);
     setError("");
     try {
-      const attempt = await api<AttemptResult>(`/api/exercises/${session.exercises[index].id}/attempt`, { method: "POST", body: JSON.stringify({ answer }) });
+      const attempt = await api<AttemptResult>(`/api/exercises/${session.exercises[index].id}/attempt`, { method: "POST", body: JSON.stringify({ answer, durationMs: Date.now() - shownAt.current }) });
       setResult(attempt);
       if (attempt.correct) setCorrectCount((count) => count + 1);
     } catch (cause) {

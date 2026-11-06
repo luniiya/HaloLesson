@@ -75,7 +75,7 @@ export function subjectMeta(subject: Subject): string {
 export const folderMeta = (count: number) => `Folder · ${count} ${count === 1 ? "item" : "items"}`;
 
 // The ring around a subject's circle: a tracker's is its level in gold; a
-// subject's is split, skill completion on the right half and level (gold) on
+// subject's is split, level (gold) on the right half and skill completion on
 // the left, both filling from the top, with gaps at the top and bottom.
 const GAP = 9;
 export function subjectRing(subject: Subject): RingArc[] {
@@ -86,7 +86,7 @@ export function subjectRing(subject: Subject): RingArc[] {
   return [
     { from: GAP, to: 180 - GAP, tone: "track" },
     { from: 180 + GAP, to: 360 - GAP, tone: "track" },
-    { from: GAP, to: GAP + done * half, tone: "fill" },
-    { from: 360 - GAP - self * half, to: 360 - GAP, tone: "gold" },
+    { from: GAP, to: GAP + self * half, tone: "gold" },
+    { from: 360 - GAP - done * half, to: 360 - GAP, tone: "fill" },
   ];
 }

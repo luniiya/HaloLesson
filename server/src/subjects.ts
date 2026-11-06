@@ -132,7 +132,13 @@ export function createSubject(
     "INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [id, userId, type, fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, folderId, nextPosition(userId, folderId), now, now],
   );
+  if (fields.level !== null) recordLevel(userId, id, fields.level, now);
   return getSubject(userId, id).subject;
+}
+
+// Every rating change is kept for the level-over-time chart; null marks a cleared rating.
+export function recordLevel(userId: string, subjectId: string, level: number | null, at = new Date().toISOString()) {
+  db.run("INSERT INTO level_history (id, user_id, subject_id, level, created_at) VALUES (?, ?, ?, ?, ?)", [crypto.randomUUID(), userId, subjectId, level, at]);
 }
 
 // Partial edit: fields left out keep their value; `icon: null` goes back to the
@@ -152,6 +158,7 @@ export function updateSubject(userId: string, subjectId: string, patch: Partial<
   db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, updated_at = ? WHERE id = ?", [
     fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, new Date().toISOString(), subjectId,
   ]);
+  if (fields.level !== current.level) recordLevel(userId, subjectId, fields.level);
   return getSubject(userId, subjectId).subject;
 }
 

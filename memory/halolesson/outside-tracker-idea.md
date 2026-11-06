@@ -30,3 +30,4 @@ Related: [[library-organisation]] [[subject-path-ui]] [[feature-parity-rule]]
 *(2026-11-06)* User: "we shouldnt have a add button in not edit mode" -> Add menu only in Edit mode.
 
 *(2026-11-07, user feedback)* Level is set ONLY from the edit-mode pill popup on the main page, never on subject/tracker pages ("we dont wanna waste space for something the user will use once every 3 months"). Tracker page = notes only. In edit mode, the bottom gap of a subject ring gets a status bubble (skills done) to mirror the top level pill.
+*(2026-11-07)* User asked to swap the halves: now **right half = level (gold), left half = skill completion**.

@@ -87,6 +87,14 @@ GET /api/agent/subjects/:id          -> { revision, subject, units: [{ id, title
 GET /api/agent/progress[?subjectId=] -> { revision, skills: [{ skillId, skillTitle, subjectId, subjectName, stars, mastery, correctAttempts, totalAttempts, lastPracticedAt }],
                                           recentMistakes: [{ exerciseId, skillId, prompt, answerGiven, correctAnswer, at }] }
 mastery is 0 to 1; stars are 0 to 3.
+GET /api/agent/stats[?subjectId=&days=7|30|90|365&tzOffset=]
+                                     -> { revision, subjectId, days, from, to,
+                                          totals: { answered, correct, timeMs, practiceDays, currentStreak, longestStreak, skillCount, skillsStarted, skillsMastered, ratings, firstActivityAt, lastActivityAt },
+                                          daily: [{ date, answered, correct, timeMs, mastery }], weekdays: [7, Monday first], hours: [24],
+                                          levels: [{ subjectId, level, at }], items: [{ id, type, name, level, levelAtStart, answered, correct, timeMs, skillCount, completedCount, mastery, lastActivityAt }],
+                                          skills: [{ id, title, unitTitle, stars, mastery, answered, correct, timeMs, lastPracticedAt }] (only with subjectId) }
+                                        Statistics, same as the user's Statistics page. Omit days for all time; streaks always count all time.
+                                        Every level change is kept, so levels shows how a rating moved (level null = rating cleared).
 
 Writes
 ------

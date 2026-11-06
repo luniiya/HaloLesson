@@ -47,7 +47,10 @@ export function getPracticeSession(userId: string, skillId: string): PracticeSes
   };
 }
 
-export function submitAttempt(userId: string, exerciseId: string, answer: unknown): AttemptResult {
+// Longer than this, the learner walked away: the time isn't recorded.
+const MAX_ANSWER_MS = 30 * 60 * 1000;
+
+export function submitAttempt(userId: string, exerciseId: string, answer: unknown, durationMs?: unknown): AttemptResult {
   const exercise = db.query<ExerciseRow & { user_id: string; skill_id: string }, [string, string]>(`
     SELECT exercises.*, subjects.user_id FROM exercises
     JOIN skills ON skills.id = exercises.skill_id JOIN units ON units.id = skills.unit_id
@@ -72,8 +75,9 @@ export function submitAttempt(userId: string, exerciseId: string, answer: unknow
   const previous = db.query<ProgressRow, [string, string]>("SELECT mastery, correct_attempts, total_attempts FROM skill_progress WHERE user_id = ? AND skill_id = ?").get(userId, exercise.skill_id) ?? { mastery: 0, correct_attempts: 0, total_attempts: 0 };
   const mastery = Math.max(0, Math.min(1, correct ? previous.mastery + (1 - previous.mastery) * 0.22 : previous.mastery * 0.75));
   const stars = mastery >= 0.9 ? 3 : mastery >= 0.6 ? 2 : mastery >= 0.25 ? 1 : 0;
+  const duration = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0 && durationMs <= MAX_ANSWER_MS ? Math.round(durationMs) : null;
   db.transaction(() => {
-    db.run("INSERT INTO attempts (id, user_id, exercise_id, answer_json, is_correct, created_at) VALUES (?, ?, ?, ?, ?, ?)", [crypto.randomUUID(), userId, exerciseId, JSON.stringify(answer ?? null), correct ? 1 : 0, new Date().toISOString()]);
+    db.run("INSERT INTO attempts (id, user_id, exercise_id, answer_json, is_correct, duration_ms, mastery_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [crypto.randomUUID(), userId, exerciseId, JSON.stringify(answer ?? null), correct ? 1 : 0, duration, mastery, new Date().toISOString()]);
     db.run(`INSERT INTO skill_progress (user_id, skill_id, stars, mastery, correct_attempts, total_attempts, last_practiced_at)
       VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, skill_id) DO UPDATE SET stars = excluded.stars,
       mastery = excluded.mastery, correct_attempts = excluded.correct_attempts, total_attempts = excluded.total_attempts,

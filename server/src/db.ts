@@ -205,3 +205,27 @@ if (!librarySubjectColumns.includes("type")) db.exec("ALTER TABLE subjects ADD C
 if (!librarySubjectColumns.includes("level")) db.exec("ALTER TABLE subjects ADD COLUMN level INTEGER");
 if (!librarySubjectColumns.includes("notes")) db.exec("ALTER TABLE subjects ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
 db.exec("CREATE INDEX IF NOT EXISTS idx_subjects_folder ON subjects(user_id, folder_id)");
+
+// Statistics: every level rating is kept (null = rating cleared), and each
+// attempt records how long the answer took and the skill's mastery after it,
+// so progress over time can be charted.
+const levelHistoryExists = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'level_history'").get();
+db.exec(`
+  CREATE TABLE IF NOT EXISTS level_history (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    level INTEGER,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_level_history_subject ON level_history(subject_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_level_history_user ON level_history(user_id, created_at);
+`);
+// Ratings made before history existed become one point at the last edit.
+if (!levelHistoryExists) {
+  db.exec("INSERT INTO level_history (id, user_id, subject_id, level, created_at) SELECT lower(hex(randomblob(16))), user_id, id, level, updated_at FROM subjects WHERE level IS NOT NULL");
+}
+const attemptColumns = columnsOf("attempts");
+if (!attemptColumns.includes("duration_ms")) db.exec("ALTER TABLE attempts ADD COLUMN duration_ms INTEGER");
+if (!attemptColumns.includes("mastery_after")) db.exec("ALTER TABLE attempts ADD COLUMN mastery_after REAL");
+db.exec("CREATE INDEX IF NOT EXISTS idx_attempts_user_time ON attempts(user_id, created_at)");

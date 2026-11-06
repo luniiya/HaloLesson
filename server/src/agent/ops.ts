@@ -3,6 +3,7 @@ import { HEX_COLOR, list, parseExercise, record, text } from "../dataExport";
 import { db } from "../db";
 import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
 import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
+import { checkStatsOptions, getStats } from "../stats";
 import { checkLevel, getSubject, nextPosition } from "../subjects";
 
 const MAX_SUBJECTS = 500;
@@ -138,6 +139,19 @@ interface MistakeRow extends ExerciseRow {
   skill_id: string;
   answer_json: string;
   created_at: string;
+}
+
+// Practice and level statistics over a range of days, the same numbers as the
+// Statistics page. Optionally scoped to one subject or tracker.
+export function readStats(userId: string, input: { subjectId?: unknown; days?: unknown; tzOffset?: unknown }) {
+  let options;
+  try {
+    options = checkStatsOptions(input);
+  } catch (error) {
+    throw new AgentError((error as Error).message, 400, "INVALID");
+  }
+  if (options.subjectId && !db.query("SELECT 1 FROM subjects WHERE id = ? AND user_id = ?").get(options.subjectId, userId)) throw notFound("Subject");
+  return { revision: libraryRevision(userId), ...getStats(userId, options) };
 }
 
 // What the learner has practiced and recently got wrong, so an agent can

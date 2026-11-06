@@ -312,16 +312,17 @@ export function matchIcon(name: string, description = ""): SubjectIcon | null {
   return best;
 }
 
-function hashIcon(id: string): SubjectIcon {
-  const hash = [...id].reduce((value, character) => (value * 31 + character.charCodeAt(0)) >>> 0, 7);
+function hashIcon(seed: string): SubjectIcon {
+  const hash = [...seed.trim().toLowerCase()].reduce((value, character) => (value * 31 + character.charCodeAt(0)) >>> 0, 7);
   return SUBJECT_ICONS[hash % 6]!;
 }
 
-// Auto: the icon whose keywords best match the name (and description), else a stable pick from the id.
-export function autoIcon(name: string, description?: string, id = name): SubjectIcon {
-  return matchIcon(name, description) ?? hashIcon(id);
+// Auto: the icon whose keywords best match the name (and description), else a
+// stable pick from the name, so the picker's preview and the saved item agree.
+export function autoIcon(name: string, description?: string): SubjectIcon {
+  return matchIcon(name, description) ?? hashIcon(name);
 }
 
-export function iconFor(subject: Pick<Subject, "id" | "icon" | "name"> & { description?: string }): Icon {
-  return subjectIcons[subject.icon ?? autoIcon(subject.name, subject.description, subject.id)];
+export function iconFor(subject: Pick<Subject, "icon" | "name"> & { description?: string }): Icon {
+  return subjectIcons[subject.icon ?? autoIcon(subject.name, subject.description)];
 }
