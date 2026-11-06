@@ -311,6 +311,8 @@ export interface ExportAttempt {
 }
 
 export interface ExportExercise {
+  // Stable across copies (format 2): importing a file again can update instead of duplicating.
+  id?: string;
   type: ExerciseType;
   prompt: string;
   options?: string[];
@@ -322,13 +324,22 @@ export interface ExportExercise {
 }
 
 export interface ExportSkill {
+  id?: string;
   title: string;
   description: string;
   exercises: ExportExercise[];
   progress?: { stars: number; mastery: number; correctAttempts: number; totalAttempts: number; lastPracticedAt: string | null };
 }
 
+export interface ExportUnit {
+  id?: string;
+  title: string;
+  description: string;
+  skills: ExportSkill[];
+}
+
 export interface ExportSubject {
+  id?: string;
   // Missing in files made before trackers existed: "subject".
   type?: SubjectType;
   level?: number | null;
@@ -346,7 +357,7 @@ export interface ExportSubject {
   folder?: number | null;
   position?: number;
   archivedAt?: string | null;
-  units: Array<{ title: string; description: string; skills: ExportSkill[] }>;
+  units: ExportUnit[];
 }
 
 // A folder in a full backup. `parent` indexes ExportFile.folders and always
@@ -361,17 +372,63 @@ export interface ExportFolder {
 
 // Backup / share format. Import also accepts a bare `{ subject, units }`
 // object for a single subject.
+// A backup is a whole account and may carry personal data (progress, levels,
+// notes, history); a share is one subject or tracker, content only.
+export type ExportKind = "backup" | "share";
+export const EXPORT_FORMAT_VERSION = 2;
+export const HALO_FILE_EXTENSION = ".halo";
+
 export interface ExportFile {
   format: "halolesson";
-  formatVersion: 1;
+  formatVersion: 1 | 2;
+  // Missing in format 1: backup when it has folders, else share.
+  kind?: ExportKind;
   exportedAt: string;
   // Missing in files made before folders existed.
   folders?: ExportFolder[];
   subjects: ExportSubject[];
 }
 
+// What to do with one subject of a file: add it as a new copy, update the
+// one you already have (same id lineage), or leave it out.
+export type ImportChoice = "add" | "update" | "skip";
+
+export interface ImportPreviewItem {
+  // Position in the file; choices are given in this order.
+  index: number;
+  type: SubjectType;
+  name: string;
+  description: string;
+  color: SubjectColor;
+  gradientStart: string;
+  icon: SubjectIcon | null;
+  unitCount: number;
+  skillCount: number;
+  exerciseCount: number;
+  // Folder names from the top, for backups.
+  folderPath: string[];
+  // Your existing copy of this item, if you have one.
+  match: { id: string; name: string } | null;
+}
+
+export interface ImportPreview {
+  kind: ExportKind;
+  formatVersion: number;
+  exportedAt: string | null;
+  items: ImportPreviewItem[];
+}
+
+export interface ImportOptions {
+  // One per item, in file order; missing entries mean "add".
+  choices?: ImportChoice[];
+  // Where new top-level items land (null: top of the library).
+  folderId?: string | null;
+}
+
 export interface ImportResult {
   subjects: Subject[];
+  // Ids of existing items that were updated in place (also listed in subjects).
+  updated?: string[];
   skillCount: number;
   exerciseCount: number;
 }

@@ -87,6 +87,12 @@ GET /api/agent/subjects/:id          -> { revision, subject, units: [{ id, title
 GET /api/agent/progress[?subjectId=] -> { revision, skills: [{ skillId, skillTitle, subjectId, subjectName, stars, mastery, correctAttempts, totalAttempts, lastPracticedAt }],
                                           recentMistakes: [{ exerciseId, skillId, prompt, answerGiven, correctAnswer, at }] }
 mastery is 0 to 1; stars are 0 to 3.
+GET /api/agent/export[?subjectId=]   -> the export file as JSON: { format: "halolesson", formatVersion: 2, kind: "share" | "backup", exportedAt, folders?, subjects: [{ id, type, name, ..., units: [{ id, title, skills: [{ id, title, exercises: [{ id, ... }] }] }] }] }
+                                        With subjectId: one subject or tracker, content only (what the user's Share > Download gives).
+                                        Without: a backup of the whole account, with progress, levels, notes and folders.
+POST /api/agent/import/preview  { file } or { halo: "<base64 .halo file>" }
+                                     -> { kind, items: [{ index, type, name, unitCount, skillCount, exerciseCount, folderPath, match: { id, name } | null }] }
+                                        match is the user's existing copy of that item (ids are kept across copies).
 GET /api/agent/stats[?subjectId=&days=7|30|90|365&tzOffset=]
                                      -> { revision, subjectId, days, from, to,
                                           totals: { answered, correct, timeMs, practiceDays, currentStreak, longestStreak, skillCount, skillsStarted, skillsMastered, ratings, firstActivityAt, lastActivityAt },
@@ -112,6 +118,8 @@ Exactly one command per request. Commands:
   { "op": "archiveItem", "kind": "subject" | "folder", "id": "<id>", "archived"?: true | false }           result { id, kind }
   { "op": "trashItem" | "restoreItem", "kind": "subject" | "folder", "id": "<id>" }                       result { id, kind }
   { "op": "deleteSubject" | "deleteUnit" | "deleteSkill", "id": "<id>" }                                   result { deleted }
+  { "op": "importFile", "file": {...} | "halo": "<base64>", "choices"?: ["add" | "update" | "skip", ...], "folderId"?: "<id>" | null }
+                                                                                                          result { subjectIds, updated, skillCount, exerciseCount }
 
 - Without id, put creates a record. With id, it updates that record; fields you leave out keep their current value.
 - position is a 0-based index among siblings. New records go last unless you give one; a position past the end also means last.
@@ -120,6 +128,8 @@ Exactly one command per request. Commands:
   items without id are created, and existing exercises you leave out are deleted. Omit exercises to keep them untouched.
 - putSubject's type ("subject" by default, or "tracker") is set on creation and never changes. putUnit on a tracker fails.
 - putSubject also takes icon, folderId (move into a folder; null for the top level) and position. putFolder with parentId nests a folder in another.
+- importFile: choices go one per item in file order (missing means add). update replaces the content of the user's matching copy
+  (see the preview's match) while keeping their progress on units, skills and exercises that stay; ask the user before updating.
 - Archive hides a subject or folder (and what is inside it) from the main page without deleting anything; archiveItem with archived:false brings it back.
 - Trash: trashItem and deleteSubject only move a subject or folder (with its contents) to the trash. The server deletes it for good 30 days later
   (purgesAt in the library), and restoreItem brings it back before then. There is no permanent delete for anyone. Only trash when asked.

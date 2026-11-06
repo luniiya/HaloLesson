@@ -1,5 +1,6 @@
 import { isSubjectIcon, isSubjectType, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
-import { HEX_COLOR, list, parseExercise, record, text } from "../dataExport";
+import { buildExport, checkImportOptions, HEX_COLOR, importSubjects, list, parseExercise, parseImport, previewImport, record, text, type ParsedImport } from "../dataExport";
+import { readUpload } from "../haloFile";
 import { db } from "../db";
 import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
 import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
@@ -139,6 +140,46 @@ interface MistakeRow extends ExerciseRow {
   skill_id: string;
   answer_json: string;
   created_at: string;
+}
+
+// The same file the web app downloads, as JSON: one subject or tracker to
+// share (content only), or the whole account as a backup with progress.
+export function readExport(userId: string, subjectId?: string) {
+  if (subjectId && !db.query("SELECT 1 FROM subjects WHERE id = ? AND user_id = ? AND deleted_at IS NULL").get(subjectId, userId)) throw notFound("Subject");
+  return buildExport(userId, subjectId);
+}
+
+// An import arrives as `file` (export JSON) or `halo` (a .halo file, base64).
+function importInput(input: Record<string, unknown>): ParsedImport {
+  try {
+    if (typeof input.halo === "string") return parseImport(readUpload(new Uint8Array(Buffer.from(input.halo, "base64"))));
+    if (input.file === undefined) throw new Error("Send the export as file (JSON) or halo (base64 .halo file)");
+    return parseImport(input.file);
+  } catch (error) {
+    throw new AgentError(error instanceof Error ? error.message : "Invalid file", 400, "INVALID");
+  }
+}
+
+// What importing a file would do: its items and which you already have.
+export function readImportPreview(userId: string, body: unknown) {
+  let input: Record<string, unknown>;
+  try {
+    input = record(body, "Body");
+  } catch (error) {
+    throw new AgentError((error as Error).message, 400, "INVALID");
+  }
+  return previewImport(userId, importInput(input));
+}
+
+function importFile(userId: string, command: Record<string, unknown>) {
+  const parsed = importInput(command);
+  const options = checkImportOptions({ choices: command.choices, folderId: command.folderId }, parsed.subjects.length);
+  if (options.folderId && !db.query("SELECT 1 FROM folders WHERE id = ? AND user_id = ?").get(options.folderId, userId)) throw notFound("Folder");
+  const result = importSubjects(userId, parsed.subjects, parsed.folders, options);
+  return {
+    subjectId: null,
+    result: { subjectIds: result.subjects.map((subject) => subject.id), updated: result.updated ?? [], skillCount: result.skillCount, exerciseCount: result.exerciseCount },
+  };
 }
 
 // Practice and level statistics over a range of days, the same numbers as the
@@ -460,8 +501,9 @@ function applyCommand(userId: string, command: Record<string, unknown>) {
     case "deleteSubject": return deleteRecord(userId, "subject", requiredId(command.id, "id"));
     case "deleteUnit": return deleteRecord(userId, "unit", requiredId(command.id, "id"));
     case "deleteSkill": return deleteRecord(userId, "skill", requiredId(command.id, "id"));
+    case "importFile": return importFile(userId, command);
     default:
-      throw new AgentError("command.op must be one of putSubject, putUnit, putSkill, putFolder, moveItem, archiveItem, trashItem, restoreItem, deleteSubject, deleteUnit, deleteSkill", 400, "UNKNOWN_OP");
+      throw new AgentError("command.op must be one of putSubject, putUnit, putSkill, putFolder, moveItem, archiveItem, trashItem, restoreItem, deleteSubject, deleteUnit, deleteSkill, importFile", 400, "UNKNOWN_OP");
   }
 }
 

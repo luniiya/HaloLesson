@@ -229,3 +229,10 @@ const attemptColumns = columnsOf("attempts");
 if (!attemptColumns.includes("duration_ms")) db.exec("ALTER TABLE attempts ADD COLUMN duration_ms INTEGER");
 if (!attemptColumns.includes("mastery_after")) db.exec("ALTER TABLE attempts ADD COLUMN mastery_after REAL");
 db.exec("CREATE INDEX IF NOT EXISTS idx_attempts_user_time ON attempts(user_id, created_at)");
+
+// Export format 2: content keeps the id it had in the file it came from, so a
+// re-import of a newer version can update this copy instead of duplicating it.
+for (const table of ["subjects", "units", "skills", "exercises"]) {
+  if (!columnsOf(table).includes("origin_id")) db.exec(`ALTER TABLE ${table} ADD COLUMN origin_id TEXT`);
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_subjects_origin ON subjects(user_id, origin_id)");

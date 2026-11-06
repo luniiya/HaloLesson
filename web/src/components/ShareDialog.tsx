@@ -82,7 +82,7 @@ export default function ShareDialog({ subjectId, onClose }: { subjectId: string;
 
         <section className="mt-4 rounded-2xl border-2 border-swan p-4">
           <h3 className="flex items-center gap-2 font-black"><IconDownload size={19} aria-hidden="true" />Export a file</h3>
-          <p className="mt-1 text-sm font-semibold leading-6 text-wolf">A snapshot anyone can import from Settings, Data. Later changes aren't included.</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-wolf">A .halo file anyone can import from Settings, Data, without your progress or notes. Send a newer one later and they can update their copy, keeping their progress.</p>
           <Button variant="secondary" className="mt-4 w-full gap-2" onClick={() => download(`${path}/export`)}><IconDownload size={19} />Download file</Button>
         </section>
       </div>

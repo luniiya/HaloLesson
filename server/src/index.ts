@@ -1,4 +1,4 @@
-import { APP_VERSION, isSubjectIcon, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type User } from "@halolesson/shared";
+import { APP_VERSION, HALO_FILE_EXTENSION, isSubjectIcon, type ExportFile, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type User } from "@halolesson/shared";
 import { resolve, sep } from "node:path";
 import {
   adminCreateUser,
@@ -21,10 +21,11 @@ import {
   userFromRequest,
 } from "./auth";
 import { handleMcp } from "./agent/mcp";
-import { AgentError, commit, readLibrary, readProgress, readStats, readSubject, report } from "./agent/ops";
+import { AgentError, commit, readExport, readImportPreview, readLibrary, readProgress, readStats, readSubject, report } from "./agent/ops";
 import { buildAgentPrompt, buildAgentSpec } from "./agent/prompt";
 import { agentFromRequest, createAgentToken, listAgentTokens, RateLimitError, revokeAgentToken, type AgentAuth } from "./agent/tokens";
-import { buildExport, getExportStats, importSubjects, parseImport } from "./dataExport";
+import { buildExport, checkImportOptions, getExportStats, importSubjects, parseImport, previewImport } from "./dataExport";
+import { readUpload, toHalo } from "./haloFile";
 import { eventStream, libraryChanged } from "./events";
 import { getPracticeSession, submitAttempt } from "./practice";
 import { getSettings, updateSettings } from "./settings";
@@ -100,13 +101,21 @@ async function libraryWrite(req: Request, run: (userId: string, input: Record<st
 
 function downloadName(name: string): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "subject";
-  return `halolesson-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+  return `halolesson-${slug}-${new Date().toISOString().slice(0, 10)}${HALO_FILE_EXTENSION}`;
 }
 
-function jsonDownload(data: unknown, filename: string) {
-  return new Response(JSON.stringify(data, null, 2), {
-    headers: { "Content-Type": "application/json", "Content-Disposition": `attachment; filename="${filename}"` },
+function haloDownload(file: ExportFile, filename: string) {
+  return new Response(toHalo(file), {
+    headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${filename}"` },
   });
+}
+
+// An import upload is the raw file (.halo zip or JSON) as the request body.
+async function readImport(req: Request) {
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.length > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
+  return parseImport(readUpload(bytes));
 }
 
 // Where agents should reach this server: the browser's origin when a user is
@@ -257,20 +266,29 @@ const server = Bun.serve({
     "/api/export": (req) => {
       try {
         const user = requireUser(req);
-        return jsonDownload(buildExport(user.id), `halolesson-backup-${new Date().toISOString().slice(0, 10)}.json`);
+        return haloDownload(buildExport(user.id), `halolesson-backup-${new Date().toISOString().slice(0, 10)}${HALO_FILE_EXTENSION}`);
       } catch (error) {
         return errorResponse(error);
       }
+    },
+    "/api/import/preview": {
+      POST: async (req) => {
+        try {
+          const user = requireUser(req);
+          return Response.json(previewImport(user.id, await readImport(req)));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
     },
     "/api/import": {
       POST: async (req) => {
         try {
           const user = requireUser(req);
-          if (Number(req.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
-          const raw = await req.text();
-          if (raw.length > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
-          const { folders, subjects } = parseImport(JSON.parse(raw));
-          const result = importSubjects(user.id, subjects, folders);
+          const { folders, subjects } = await readImport(req);
+          // Choices ride in the query so the body stays the untouched file.
+          const raw = new URL(req.url).searchParams.get("options");
+          const result = importSubjects(user.id, subjects, folders, checkImportOptions(raw ? JSON.parse(raw) : undefined, subjects.length));
           libraryChanged(user.id, null);
           return Response.json(result, { status: 201 });
         } catch (error) {
@@ -387,6 +405,10 @@ const server = Bun.serve({
       const params = new URL(req.url).searchParams;
       return readStats(auth.user.id, { subjectId: params.get("subjectId"), days: params.get("days"), tzOffset: params.get("tzOffset") });
     }),
+    "/api/agent/export": (req) => agentRoute(req, (auth) => readExport(auth.user.id, new URL(req.url).searchParams.get("subjectId") || undefined)),
+    "/api/agent/import/preview": {
+      POST: (req) => agentRoute(req, async (auth) => readImportPreview(auth.user.id, await req.json())),
+    },
     "/api/agent/commits": {
       POST: (req) => agentRoute(req, async (auth) => commit(auth.user.id, await req.json())),
     },
@@ -486,7 +508,7 @@ const server = Bun.serve({
     "/api/subjects/:id/export": (req) => {
       try {
         const file = buildExport(requireUser(req).id, req.params.id);
-        return jsonDownload(file, downloadName(file.subjects[0]!.name));
+        return haloDownload(file, downloadName(file.subjects[0]!.name));
       } catch (error) {
         return errorResponse(error);
       }

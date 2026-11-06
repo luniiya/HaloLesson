@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { IconDownload, IconFileUpload } from "@tabler/icons-react";
-import type { ExportStats, ImportResult } from "@halolesson/shared";
+import type { ExportStats, ImportPreview, ImportResult } from "@halolesson/shared";
 import { api } from "$lib/api";
 import { download } from "$lib/server";
 import Button from "../../components/Button";
+import ImportDialog from "../../components/ImportDialog";
 
 function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -17,40 +18,43 @@ export function ImportPanel({ onImported }: { onImported?: (result: ImportResult
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
+  // A file that has been read and previewed, waiting for the user's choices.
+  const [pending, setPending] = useState<{ file: Blob; preview: ImportPreview } | null>(null);
 
-  async function importText(raw: string) {
+  async function previewFile(file: Blob | undefined) {
+    if (!file) return;
     setError("");
     setResult(null);
+    if (file.size > 10 * 1024 * 1024) return setError("Import files must be 10 MB or smaller");
+    setBusy(true);
+    try {
+      const preview = await api<ImportPreview>("/api/import/preview", { method: "POST", body: file, headers: { "Content-Type": "application/octet-stream" } });
+      setPending({ file, preview });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't read that file");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function previewText(raw: string) {
     try {
       JSON.parse(raw);
     } catch {
       setError("That isn't valid JSON. If an agent wrote it, make sure you copied the whole response.");
       return;
     }
-    setBusy(true);
-    try {
-      const imported = await api<ImportResult>("/api/import", { method: "POST", body: raw });
-      setResult(imported);
-      setPasted("");
-      onImported?.(imported);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Import failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function importFile(file: File | undefined) {
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) return setError("Import files must be 10 MB or smaller");
-    await importText(await file.text());
+    void previewFile(new Blob([raw], { type: "application/json" }));
   }
 
   function drop(event: DragEvent) {
     event.preventDefault();
     setDragging(false);
-    void importFile(event.dataTransfer.files[0]);
+    void previewFile(event.dataTransfer.files[0]);
   }
+
+  const updatedCount = result?.updated?.length ?? 0;
+  const addedCount = (result?.subjects.length ?? 0) - updatedCount;
 
   return (
     <div className="flex flex-col gap-4">
@@ -64,20 +68,34 @@ export function ImportPanel({ onImported }: { onImported?: (result: ImportResult
         disabled={busy}
       >
         <IconFileUpload size={32} className="text-secondary" aria-hidden="true" />
-        <span className="font-extrabold text-ink">{busy ? "Importing…" : "Drop a .json file or click to choose"}</span>
-        <span className="text-xs font-semibold text-wolf">haloLesson backups, shared subjects, or agent JSON output</span>
+        <span className="font-extrabold text-ink">{busy ? "Reading…" : "Drop a .halo file or click to choose"}</span>
+        <span className="text-xs font-semibold text-wolf">Backups, shared subjects, older .json exports, or agent JSON output</span>
       </button>
-      <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void importFile(event.target.files?.[0]); event.target.value = ""; }} />
+      <input ref={fileRef} type="file" accept=".halo,.zip,.json,application/json,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void previewFile(event.target.files?.[0]); event.target.value = ""; }} />
       <label className="form-label">Or paste JSON
         <textarea className="form-input min-h-32 resize-y font-mono text-xs leading-5" value={pasted} onChange={(event) => setPasted(event.target.value)} placeholder={'{ "subject": { "name": "…" }, "units": [ … ] }'} spellCheck={false} />
       </label>
       <div className="flex justify-end">
-        <Button disabled={!pasted.trim() || busy} onClick={() => void importText(pasted)}>{busy ? "Importing…" : "Import pasted JSON"}</Button>
+        <Button disabled={!pasted.trim() || busy} onClick={() => previewText(pasted)}>{busy ? "Reading…" : "Import pasted JSON"}</Button>
       </div>
       {error && <p role="alert" className="notice-error">{error}</p>}
+      {pending && (
+        <ImportDialog
+          file={pending.file}
+          preview={pending.preview}
+          onClose={() => setPending(null)}
+          onImported={(imported) => {
+            setPending(null);
+            setPasted("");
+            setResult(imported);
+            onImported?.(imported);
+          }}
+        />
+      )}
       {result && (
         <div role="status" className="notice-success">
-          Imported {plural(result.subjects.length, "subject")}, {plural(result.skillCount, "skill")} and {plural(result.exerciseCount, "exercise")}.
+          {[addedCount && `Added ${plural(addedCount, "item")}`, updatedCount && `updated ${plural(updatedCount, "item")}`].filter(Boolean).join(", ").replace(/^u/, "U")}
+          {` (${plural(result.skillCount, "skill")}, ${plural(result.exerciseCount, "exercise")}).`}
           <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
             {result.subjects.map((subject) => <Link key={subject.id} to={`/subjects/${subject.id}`} className="underline underline-offset-2">Open {subject.name}</Link>)}
           </span>
@@ -99,7 +117,7 @@ export default function DataSettings() {
     <>
       <section className="settings-card">
         <h2 className="settings-card-title">Export a backup</h2>
-        <p className="settings-card-hint">One JSON file with every subject, unit, skill and exercise, plus your mastery. To share a single subject, use Share on its page instead.</p>
+        <p className="settings-card-hint">A .halo file with your whole account: every subject, tracker and folder, plus your progress, levels, notes and history. To share one subject without your personal data, use Share on its page instead.</p>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([["Subjects", stats?.subjectCount], ["Units", stats?.unitCount], ["Skills", stats?.skillCount], ["Exercises", stats?.exerciseCount]] as const).map(([label, value]) => (
             <div key={label} className="rounded-xl bg-eel px-4 py-3">
@@ -114,7 +132,7 @@ export default function DataSettings() {
       </section>
       <section className="settings-card">
         <h2 className="settings-card-title">Import</h2>
-        <p className="settings-card-hint">Imports always add new subjects. Nothing you already have is changed or replaced.</p>
+        <p className="settings-card-hint">You see what’s inside before anything is imported. For items you already have, you choose: update yours, or add a copy.</p>
         <div className="mt-5"><ImportPanel onImported={loadStats} /></div>
       </section>
     </>

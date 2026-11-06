@@ -8,11 +8,16 @@ import {
   type ExerciseType,
   type ExportAttempt,
   type ExportExercise,
+  EXPORT_FORMAT_VERSION,
   type ExportFile,
+  type ExportKind,
   type ExportFolder,
   type ExportSkill,
   type ExportStats,
   type ExportSubject,
+  type ImportChoice,
+  type ImportOptions,
+  type ImportPreview,
   type ImportResult,
   type SubjectColor,
 } from "@halolesson/shared";
@@ -26,6 +31,7 @@ const MAX_EXERCISES = 20_000;
 
 interface SubjectRow {
   id: string;
+  origin_id: string | null;
   type: string;
   level: number | null;
   notes: string;
@@ -41,6 +47,7 @@ interface SubjectRow {
 
 interface ExerciseRow {
   id: string;
+  origin_id: string | null;
   type: ExerciseType;
   prompt: string;
   content_json: string;
@@ -69,6 +76,21 @@ export function getExportStats(userId: string): ExportStats {
     .get(userId)!;
 }
 
+// Ids in a file are the content's lineage: the id it had where it was first
+// exported. Two copies of one share in a backup would collide, so a repeat
+// falls back to the local id.
+class FileIds {
+  private used = new Set<string>();
+  claim(lineage: string | null, local: string): string {
+    const id = lineage && !this.used.has(lineage) ? lineage : local;
+    this.used.add(id);
+    return id;
+  }
+}
+
+const lineageOf = (table: "units" | "skills", ids: string[]) =>
+  new Map(ids.length ? db.query<{ id: string; origin_id: string | null }, string[]>(`SELECT id, origin_id FROM ${table} WHERE id IN (${ids.map(() => "?").join(", ")})`).all(...ids).map((row) => [row.id, row.origin_id]) : []);
+
 function exportExercise(row: ExerciseRow): ExportExercise {
   const content = JSON.parse(row.content_json) as { options?: string[]; correctIndex?: number; answers?: string[] };
   return row.type === "multiple_choice"
@@ -76,9 +98,12 @@ function exportExercise(row: ExerciseRow): ExportExercise {
     : { type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
 }
 
-function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean): ExportSubject {
+function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean, ids: FileIds): ExportSubject {
   const { units } = getSubject(userId, row.id);
+  const unitOrigins = lineageOf("units", units.map((unit) => unit.id));
+  const skillOrigins = lineageOf("skills", units.flatMap((unit) => unit.skills.map((skill) => skill.id)));
   return {
+    id: ids.claim(row.origin_id, row.id),
     type: isSubjectType(row.type) ? row.type : "subject",
     // Self-rating and notes are personal, like skill progress: backups only.
     ...(includeProgress ? {
@@ -93,17 +118,19 @@ function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean
     gradientEnd: row.gradient_end,
     icon: isSubjectIcon(row.icon) ? row.icon : null,
     units: units.map((unit) => ({
+      id: ids.claim(unitOrigins.get(unit.id) ?? null, unit.id),
       title: unit.title,
       description: unit.description,
       skills: unit.skills.map((skill) => {
         const exported: ExportSkill = {
+          id: ids.claim(skillOrigins.get(skill.id) ?? null, skill.id),
           title: skill.title,
           description: skill.description,
           exercises: db
             .query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE skill_id = ? ORDER BY position, created_at")
             .all(skill.id)
             .map((exercise) => {
-              const exported = exportExercise(exercise);
+              const exported = { id: ids.claim(exercise.origin_id, exercise.id), ...exportExercise(exercise) };
               if (includeProgress) {
                 exported.attempts = db
                   .query<{ created_at: string; is_correct: number; duration_ms: number | null; mastery_after: number | null }, [string, string]>("SELECT created_at, is_correct, duration_ms, mastery_after FROM attempts WHERE user_id = ? AND exercise_id = ? ORDER BY created_at")
@@ -140,7 +167,7 @@ export function buildExport(userId: string, subjectId?: string): ExportFile {
   if (subjectId) {
     const rows = db.query<SubjectRow, [string, string]>("SELECT * FROM subjects WHERE user_id = ? AND id = ?").all(userId, subjectId);
     if (rows.length === 0) throw new Error("Subject not found");
-    return { format: "halolesson", formatVersion: 1, exportedAt, subjects: rows.map((row) => exportSubject(userId, row, false)) };
+    return { format: "halolesson", formatVersion: EXPORT_FORMAT_VERSION, kind: "share", exportedAt, subjects: rows.map((row) => exportSubject(userId, row, false, new FileIds())) };
   }
 
   const library = getLibrary(userId);
@@ -166,16 +193,17 @@ export function buildExport(userId: string, subjectId?: string): ExportFile {
     .query<SubjectRow, [string]>("SELECT * FROM subjects WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at")
     .all(userId)
     .filter((row) => states.get(row.id) !== "trashed");
+  const ids = new FileIds();
   const subjects = rows.map((row) => {
     const parent = folderOf.get(row.id) ?? null;
     return {
-      ...exportSubject(userId, row, true),
+      ...exportSubject(userId, row, true, ids),
       folder: parent === null ? null : index.get(parent)!,
       position: row.position,
       archivedAt: row.archived_at,
     };
   });
-  return { format: "halolesson", formatVersion: 1, exportedAt, folders, subjects };
+  return { format: "halolesson", formatVersion: EXPORT_FORMAT_VERSION, kind: "backup", exportedAt, folders, subjects };
 }
 
 export function record(value: unknown, where: string): Record<string, unknown> {
@@ -263,6 +291,10 @@ function parseAttempts(value: unknown): ExportAttempt[] | undefined {
   });
 }
 
+const FILE_ID = /^[A-Za-z0-9_-]{1,100}$/;
+// Ids are optional (format 1 has none); a malformed one is dropped, not fatal.
+const fileId = (value: unknown) => (typeof value === "string" && FILE_ID.test(value) ? value : undefined);
+
 const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 const position = (value: unknown, fallback: number) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback);
 
@@ -290,6 +322,7 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
   const color = SUBJECT_COLORS.includes(input.color as SubjectColor) ? (input.color as SubjectColor) : "green";
   const type = isSubjectType(input.type) ? input.type : "subject";
   return {
+    id: fileId(input.id),
     type,
     level: isLevel(input.level) ? input.level : null,
     notes: text(input.notes, `${where} notes`, MAX_NOTES_LENGTH),
@@ -308,15 +341,18 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
       const unitWhere = `${where} unit ${unitIndex + 1}`;
       const unit = record(unitValue, unitWhere);
       return {
+        id: fileId(unit.id),
         title: text(unit.title, `${unitWhere} title`, 120, true),
         description: text(unit.description, `${unitWhere} description`, 500),
         skills: list(unit.skills, `${unitWhere} skills`).map((skillValue, skillIndex) => {
           const skillWhere = `${unitWhere} skill ${skillIndex + 1}`;
           const skill = record(skillValue, skillWhere);
           return {
+            id: fileId(skill.id),
             title: text(skill.title, `${skillWhere} title`, 120, true),
             description: text(skill.description, `${skillWhere} description`, 500),
             exercises: list(skill.exercises, `${skillWhere} exercises`).map((exercise, index) => ({
+              id: fileId((exercise as Record<string, unknown>).id),
               ...parseExercise(exercise, `${skillWhere} exercise ${index + 1}`),
               attempts: parseAttempts((exercise as Record<string, unknown>).attempts),
             })),
@@ -331,12 +367,24 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
 // Accepts a haloLesson export file, or a bare `{ subject, units }` object for
 // one subject. Everything is validated before anything is
 // written, and imports always create new subjects instead of overwriting.
-export function parseImport(value: unknown): { folders: ExportFolder[]; subjects: ExportSubject[] } {
+export interface ParsedImport {
+  kind: ExportKind;
+  formatVersion: number;
+  exportedAt: string | null;
+  folders: ExportFolder[];
+  subjects: ExportSubject[];
+}
+
+export function parseImport(value: unknown): ParsedImport {
   const input = record(value, "File");
   let subjects: ExportSubject[];
   let folders: ExportFolder[] = [];
+  let formatVersion = 0;
   if (input.format === "halolesson") {
-    if (input.formatVersion !== 1) throw new Error("This export was made by a newer haloLesson version");
+    formatVersion = Number(input.formatVersion);
+    if (formatVersion !== 1 && formatVersion !== EXPORT_FORMAT_VERSION) {
+      throw new Error(formatVersion > EXPORT_FORMAT_VERSION ? "This export was made by a newer haloLesson version. Update haloLesson to import it" : "Unknown export format version");
+    }
     folders = list(input.folders, "folders").map(parseFolder);
     if (folders.length > MAX_SUBJECTS) throw new Error(`Import at most ${MAX_SUBJECTS} folders at once`);
     subjects = list(input.subjects, "subjects").map((subject, index) => parseSubject(subject, `Subject ${index + 1}`, folders.length, index));
@@ -349,59 +397,189 @@ export function parseImport(value: unknown): { folders: ExportFolder[]; subjects
   if (subjects.length > MAX_SUBJECTS) throw new Error(`Import at most ${MAX_SUBJECTS} subjects at once`);
   const exerciseCount = subjects.flatMap((subject) => subject.units.flatMap((unit) => unit.skills.flatMap((skill) => skill.exercises))).length;
   if (exerciseCount > MAX_EXERCISES) throw new Error(`Import at most ${MAX_EXERCISES} exercises at once`);
-  return { folders, subjects };
+  const kind: ExportKind = input.kind === "backup" || input.kind === "share" ? input.kind : folders.length ? "backup" : "share";
+  return { kind, formatVersion, exportedAt: date(input.exportedAt), folders, subjects };
 }
 
-// Imported folders are always new too. Top-level items go after whatever the
-// library already has, keeping their order from the file.
-export function importSubjects(userId: string, subjects: ExportSubject[], folders: ExportFolder[] = []): ImportResult {
+// Your existing copy of a file's subject: same type, not in the trash, and
+// either the very item that was exported or a copy made from it.
+function findMatch(userId: string, subject: ExportSubject): { id: string; name: string } | null {
+  if (!subject.id) return null;
+  return db.query<{ id: string; name: string }, [string, string, string, string]>(`
+    SELECT id, name FROM subjects WHERE user_id = ? AND type = ? AND deleted_at IS NULL AND (id = ? OR origin_id = ?)
+    ORDER BY updated_at DESC LIMIT 1
+  `).get(userId, subject.type ?? "subject", subject.id, subject.id) ?? null;
+}
+
+export function previewImport(userId: string, parsed: ParsedImport): ImportPreview {
+  const folderPath = (index: number | null | undefined): string[] => {
+    const path: string[] = [];
+    for (let at = index ?? null; at !== null; at = parsed.folders[at]!.parent) path.unshift(parsed.folders[at]!.name);
+    return path;
+  };
+  return {
+    kind: parsed.kind,
+    formatVersion: parsed.formatVersion,
+    exportedAt: parsed.exportedAt,
+    items: parsed.subjects.map((subject, index) => ({
+      index,
+      type: subject.type ?? "subject",
+      name: subject.name,
+      description: subject.description,
+      color: subject.color,
+      gradientStart: subject.gradientStart,
+      icon: subject.icon ?? null,
+      unitCount: subject.units.length,
+      skillCount: subject.units.reduce((sum, unit) => sum + unit.skills.length, 0),
+      exerciseCount: subject.units.reduce((sum, unit) => sum + unit.skills.reduce((total, skill) => total + skill.exercises.length, 0), 0),
+      folderPath: folderPath(subject.folder),
+      match: findMatch(userId, subject),
+    })),
+  };
+}
+
+export function checkImportOptions(value: unknown, count: number): ImportOptions {
+  if (value === undefined || value === null) return {};
+  const input = record(value, "options");
+  const choices = list(input.choices, "options.choices").map((choice, index) => {
+    if (choice !== "add" && choice !== "update" && choice !== "skip") throw new Error(`options.choices ${index + 1} must be add, update or skip`);
+    return choice as ImportChoice;
+  });
+  if (choices.length > count) throw new Error("options.choices has more entries than the file has items");
+  const folderId = input.folderId === undefined || input.folderId === null ? null : String(input.folderId);
+  return { choices, folderId };
+}
+
+const contentJson = (exercise: ExportExercise) =>
+  JSON.stringify(exercise.type === "multiple_choice" ? { options: exercise.options, correctIndex: exercise.correctIndex } : { answers: exercise.answers });
+
+// "Update mine": the existing subject takes the file's content. Units, skills
+// and exercises with the same lineage are updated in place, so your progress
+// and answers on them stay; ones the file no longer has are removed.
+function updateFromFile(subjectId: string, subject: ExportSubject) {
+  const now = new Date().toISOString();
+  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, updated_at = ? WHERE id = ?", [
+    subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, now, subjectId,
+  ]);
+  type Row = { id: string; lineage: string };
+  const units = new Map(db.query<Row, [string]>("SELECT id, COALESCE(origin_id, id) AS lineage FROM units WHERE subject_id = ?").all(subjectId).map((row) => [row.lineage, row.id]));
+  const skills = new Map(db.query<Row, [string]>("SELECT skills.id, COALESCE(skills.origin_id, skills.id) AS lineage FROM skills JOIN units ON units.id = skills.unit_id WHERE units.subject_id = ?").all(subjectId).map((row) => [row.lineage, row.id]));
+  const exercises = new Map(db.query<Row, [string]>(`SELECT exercises.id, COALESCE(exercises.origin_id, exercises.id) AS lineage FROM exercises
+    JOIN skills ON skills.id = exercises.skill_id JOIN units ON units.id = skills.unit_id WHERE units.subject_id = ?`).all(subjectId).map((row) => [row.lineage, row.id]));
+  const kept = { units: new Set<string>(), skills: new Set<string>(), exercises: new Set<string>() };
+  subject.units.forEach((unit, unitIndex) => {
+    let unitId = unit.id ? units.get(unit.id) : undefined;
+    if (unitId) db.run("UPDATE units SET title = ?, description = ?, position = ? WHERE id = ?", [unit.title, unit.description, unitIndex, unitId]);
+    else {
+      unitId = crypto.randomUUID();
+      db.run("INSERT INTO units (id, subject_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [unitId, subjectId, unit.title, unit.description, unitIndex, unit.id ?? null, now]);
+    }
+    kept.units.add(unitId);
+    unit.skills.forEach((skill, skillIndex) => {
+      let skillId = skill.id ? skills.get(skill.id) : undefined;
+      if (skillId) db.run("UPDATE skills SET unit_id = ?, title = ?, description = ?, position = ? WHERE id = ?", [unitId!, skill.title, skill.description, skillIndex, skillId]);
+      else {
+        skillId = crypto.randomUUID();
+        db.run("INSERT INTO skills (id, unit_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [skillId, unitId!, skill.title, skill.description, skillIndex, skill.id ?? null, now]);
+      }
+      kept.skills.add(skillId);
+      skill.exercises.forEach((exercise, exerciseIndex) => {
+        let exerciseId = exercise.id ? exercises.get(exercise.id) : undefined;
+        if (exerciseId) {
+          db.run("UPDATE exercises SET skill_id = ?, type = ?, prompt = ?, content_json = ?, explanation = ?, position = ? WHERE id = ?", [
+            skillId!, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, exerciseIndex, exerciseId,
+          ]);
+        } else {
+          exerciseId = crypto.randomUUID();
+          db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+            exerciseId, skillId!, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, exerciseIndex, exercise.id ?? null, now,
+          ]);
+        }
+        kept.exercises.add(exerciseId);
+      });
+    });
+  });
+  // Children first: a skill that moved to another unit must not go with its old unit.
+  for (const id of exercises.values()) if (!kept.exercises.has(id)) db.run("DELETE FROM exercises WHERE id = ?", [id]);
+  for (const id of skills.values()) if (!kept.skills.has(id)) db.run("DELETE FROM skills WHERE id = ?", [id]);
+  for (const id of units.values()) if (!kept.units.has(id)) db.run("DELETE FROM units WHERE id = ?", [id]);
+}
+
+// Adds each chosen item as a new copy (remembering the file's ids, so a later
+// version can update it) or updates your existing copy. Folders are always
+// new: only the ones holding added items are created, under `folderId`.
+// Top-level items go after whatever that folder already has, keeping file order.
+export function importSubjects(userId: string, subjects: ExportSubject[], folders: ExportFolder[] = [], options: ImportOptions = {}): ImportResult {
   let skillCount = 0;
   let exerciseCount = 0;
   const ids: string[] = [];
+  const updated: string[] = [];
+  const destination = options.folderId ?? null;
+  if (destination && !db.query("SELECT 1 FROM folders WHERE id = ? AND user_id = ? AND deleted_at IS NULL").get(destination, userId)) throw new Error("Folder not found");
+  const plan = subjects.map((subject, index) => {
+    const choice = options.choices?.[index] ?? "add";
+    if (choice === "skip") return { subject, action: "skip" as const };
+    const match = choice === "update" ? findMatch(userId, subject) : null;
+    return match ? { subject, action: "update" as const, target: match.id } : { subject, action: "add" as const };
+  });
+
+  // Folders needed by added items, with their ancestors.
+  const needed = new Set<number>();
+  for (const step of plan) {
+    if (step.action !== "add") continue;
+    for (let at = step.subject.folder ?? null; at !== null && !needed.has(at); at = folders[at]!.parent) needed.add(at);
+  }
+
   db.transaction(() => {
-    const offset = nextPosition(userId, null);
-    const folderIds: string[] = [];
-    for (const folder of folders) {
+    const offset = nextPosition(userId, destination);
+    const folderIds = new Map<number, string>();
+    folders.forEach((folder, index) => {
+      if (!needed.has(index)) return;
       const now = new Date().toISOString();
       const folderId = crypto.randomUUID();
-      folderIds.push(folderId);
+      folderIds.set(index, folderId);
       db.run(
         "INSERT INTO folders (id, user_id, parent_id, name, color, position, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [folderId, userId, folder.parent === null ? null : folderIds[folder.parent]!, folder.name, folder.color, folder.parent === null ? offset + folder.position : folder.position, folder.archivedAt, now, now],
+        [folderId, userId, folder.parent === null ? destination : folderIds.get(folder.parent)!, folder.name, folder.color, folder.parent === null ? offset + folder.position : folder.position, folder.archivedAt, now, now],
       );
-    }
-    subjects.forEach((subject, subjectIndex) => {
+    });
+    plan.forEach((step, subjectIndex) => {
+      const { subject } = step;
+      if (step.action === "skip") return;
+      skillCount += subject.units.reduce((sum, unit) => sum + unit.skills.length, 0);
+      exerciseCount += subject.units.reduce((sum, unit) => sum + unit.skills.reduce((total, skill) => total + skill.exercises.length, 0), 0);
+      if (step.action === "update") {
+        updateFromFile(step.target, subject);
+        ids.push(step.target);
+        updated.push(step.target);
+        return;
+      }
       const now = new Date().toISOString();
       const subjectId = crypto.randomUUID();
       ids.push(subjectId);
       const folder = subject.folder ?? null;
       const at = subject.position ?? subjectIndex;
       db.run(
-        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, folder_id, position, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, folder === null ? null : folderIds[folder]!, folder === null ? offset + at : at, subject.archivedAt ?? null, now, now],
+        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, folder_id, position, archived_at, origin_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, folder === null ? destination : folderIds.get(folder)!, folder === null ? offset + at : at, subject.archivedAt ?? null, subject.id ?? null, now, now],
       );
       const history = subject.levelHistory?.length ? subject.levelHistory : subject.level != null ? [{ level: subject.level, at: now }] : [];
       for (const point of history) recordLevel(userId, subjectId, point.level, point.at);
       subject.units.forEach((unit, unitIndex) => {
         const unitId = crypto.randomUUID();
-        db.run("INSERT INTO units (id, subject_id, title, description, position, created_at) VALUES (?, ?, ?, ?, ?, ?)", [
-          unitId, subjectId, unit.title, unit.description, unitIndex, now,
+        db.run("INSERT INTO units (id, subject_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+          unitId, subjectId, unit.title, unit.description, unitIndex, unit.id ?? null, now,
         ]);
         unit.skills.forEach((skill, skillIndex) => {
           const skillId = crypto.randomUUID();
-          skillCount += 1;
-          db.run("INSERT INTO skills (id, unit_id, title, description, position, created_at) VALUES (?, ?, ?, ?, ?, ?)", [
-            skillId, unitId, skill.title, skill.description, skillIndex, now,
+          db.run("INSERT INTO skills (id, unit_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+            skillId, unitId, skill.title, skill.description, skillIndex, skill.id ?? null, now,
           ]);
           skill.exercises.forEach((exercise, exerciseIndex) => {
-            exerciseCount += 1;
-            const content = exercise.type === "multiple_choice"
-              ? { options: exercise.options, correctIndex: exercise.correctIndex }
-              : { answers: exercise.answers };
             const exerciseId = crypto.randomUUID();
             db.run(
-              "INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-              [exerciseId, skillId, exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, exerciseIndex, now],
+              "INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              [exerciseId, skillId, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, exerciseIndex, exercise.id ?? null, now],
             );
             for (const attempt of exercise.attempts ?? []) {
               db.run(
@@ -420,5 +598,6 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
       });
     });
   })();
-  return { subjects: ids.map((id) => getSubject(userId, id).subject), skillCount, exerciseCount };
+  if (ids.length === 0) throw new Error("Pick at least one item to import");
+  return { subjects: ids.map((id) => getSubject(userId, id).subject), updated, skillCount, exerciseCount };
 }

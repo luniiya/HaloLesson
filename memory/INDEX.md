@@ -35,3 +35,4 @@
 - [Statistics](halolesson/statistics.md) — Stats tab, level history + per-attempt time/mastery stored, shared getStats for web and agents
 - [Agent tab](halolesson/agent-tab.md) — Connect agent is a /agent tab, not a popup
 - [PWA](halolesson/pwa.md) — installable: manifest, icons, sw.js (API never cached), prod-only registration
+- [Export format v2](halolesson/export-format-v2.md) — .halo zip; subject page = share one, settings = full backup; ask on re-import; preview+pick

@@ -2,7 +2,7 @@ import { APP_VERSION, LEVEL_LABELS, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_ICONS }
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { AgentError, commit, readLibrary, readProgress, readStats, readSubject, report } from "./ops";
+import { AgentError, commit, readExport, readImportPreview, readLibrary, readProgress, readStats, readSubject, report } from "./ops";
 import { agentFromRequest, RateLimitError, type AgentAuth } from "./tokens";
 
 const exerciseSchema = {
@@ -206,6 +206,34 @@ const tools = [
       op: args.kind === "subject" ? "deleteSubject" : args.kind === "unit" ? "deleteUnit" : args.kind === "skill" ? "deleteSkill" : "delete",
       id: args.id,
     }),
+  },
+  {
+    name: "halo_export",
+    description: "Export as JSON, the same content as the user's downloadable .halo file. With subjectId: that one subject or tracker, content only, ready to share. Without: a backup of the whole account including progress, levels, notes and folders. Every item carries a stable id, so importing a newer version can update existing copies.",
+    inputSchema: { type: "object", properties: { subjectId: { type: "string" } } },
+    run: (auth: AgentAuth, args: Record<string, unknown>) => readExport(auth.user.id, typeof args.subjectId === "string" ? args.subjectId : undefined),
+  },
+  {
+    name: "halo_preview_import",
+    description: "Before halo_import: list the items in a file (in order) and, for each, the user's existing copy if they already have one (match).",
+    inputSchema: { type: "object", properties: { file: { type: "object", description: "An export file as JSON (from halo_export, or a lesson file)" },
+        halo: { type: "string", description: "Or: a .halo file, base64 encoded" }, } },
+    run: (auth: AgentAuth, args: Record<string, unknown>) => readImportPreview(auth.user.id, args),
+  },
+  {
+    name: "halo_import",
+    description: "Import an export file. choices has one entry per item in file order: add (a new copy), update (replace the user's matching copy's content, keeping their progress on what stays) or skip; missing entries mean add. Ask the user before choosing update. folderId puts new items in a folder.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...writeOptions,
+        file: { type: "object", description: "An export file as JSON (from halo_export, or a lesson file)" },
+        halo: { type: "string", description: "Or: a .halo file, base64 encoded" },
+        choices: { type: "array", items: { type: "string", enum: ["add", "update", "skip"] } },
+        folderId: { type: ["string", "null"] },
+      },
+    },
+    command: (args: Record<string, unknown>) => ({ op: "importFile", file: args.file, halo: args.halo, choices: args.choices, folderId: args.folderId }),
   },
   {
     name: "halo_report_problem",
