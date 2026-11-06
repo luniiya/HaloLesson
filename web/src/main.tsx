@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AuthProvider } from "$lib/auth";
-import { applyAccent, cachedAccent } from "$lib/theme";
+import { applyAccent, applySecondary, cachedAccent, cachedSecondary, initTheme } from "$lib/theme";
 import AppLayout from "./components/AppLayout";
 import AuthPage from "./routes/AuthPage";
 import PracticePage from "./routes/PracticePage";
@@ -20,6 +20,8 @@ import SettingsLayout from "./routes/settings/SettingsLayout";
 import "./app.css";
 
 applyAccent(cachedAccent());
+applySecondary(cachedSecondary());
+initTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

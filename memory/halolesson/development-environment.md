@@ -16,3 +16,7 @@ type: project
 Related: [[halolesson-next-steps]]
 
 *(as of 2026-11-06)* Machine LAN IP is now **192.168.2.222** (was .221), so bwl reaches the UI at `http://192.168.2.222:7270`. `web/vite.config.ts` still hardcodes port 5173, so start the UI with `bunx vite dev --host 0.0.0.0 --port 7270` from `web/` (API: `bun --watch src/index.ts` from `server/`). User says the existing code was written by Kimi and needs fixing.
+
+*(as of 2026-11-06, later)* LAN IP is back to **192.168.2.221** on wlan0 (.222 no longer exists). Check `ip -4 -o addr` before using it.
+
+*(2026-11-06)* Why the IP keeps changing: the user works from more than one PC (.221 vs .222 are different machines). Always read the current IP with `ip -4 -o addr` and never assume one from memory.

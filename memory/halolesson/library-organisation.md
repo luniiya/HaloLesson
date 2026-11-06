@@ -24,3 +24,13 @@ type: decision
 - Edit mode uses the same layout (`layoutOrbit` / `OrbitStage` exported from `OrbitView.tsx`; `LibraryOrbit` renders editable circles on it). Each folder circle has a +/− button (`.orbit-expand`) that opens it in place. The dialog's "Open folder" opens it in place too.
 - Drag in Edit mode: drop near any circle (ring or fanned child) to take its slot, which moves the item into that circle's folder if needed. Drop on a folder face or an "Empty folder" marker to move it in. The move index is counted among all siblings, archived ones too, the same way `moveItem` counts them.
 - New subjects and folders are created in the innermost open folder.
+
+*(2026-11-06)* Create-subject is now a popup dialog (agent-dialog, max-w-2xl, "like New folder but bigger"). Normal and Edit mode are now ONE component (LibraryOrbit with `editing`) so toggling Edit never remounts the orbit; OrbitView.tsx keeps only shared layout helpers.
+
+*(2026-11-06)* Icons expanded to 120 (12 originals kept first, ids stable; stored in DB). web/src/lib/subjectIcons.ts has SUBJECT_ICON_INFO (label+keywords), searchIcons, autoIcon (keyword match on name, else id hash). IconPicker.tsx (search, separate Auto card) used in CreateSubjectForm and LibraryItemDialog.
+
+*(2026-11-06)* Main page mode: View | Edit segmented toggle replaces the Edit/Done button (user unsure, Claude recommended the toggle; easy to revert).
+
+*(2026-11-06, correction)* User did NOT want a segmented toggle: wants ONE button that flips between view and edit. Built: single button showing the current mode (Viewing / Editing), blue while editing.
+
+*(2026-11-07)* Header layout: Add button must never wrap the title or shift the canvas. Built: Add is absolutely positioned against the mode button: left of it when the header is wide (container query), below it right-aligned otherwise.

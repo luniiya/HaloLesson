@@ -1,6 +1,9 @@
 import {
+  isLevel,
   isSubjectIcon,
+  isSubjectType,
   libraryStates,
+  MAX_NOTES_LENGTH,
   SUBJECT_COLORS,
   type ExerciseType,
   type ExportExercise,
@@ -22,6 +25,9 @@ const MAX_EXERCISES = 20_000;
 
 interface SubjectRow {
   id: string;
+  type: string;
+  level: number | null;
+  notes: string;
   name: string;
   description: string;
   color: SubjectColor;
@@ -71,6 +77,9 @@ function exportExercise(row: ExerciseRow): ExportExercise {
 function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean): ExportSubject {
   const { units } = getSubject(userId, row.id);
   return {
+    type: isSubjectType(row.type) ? row.type : "subject",
+    // Self-rating and notes are personal, like skill progress: backups only.
+    ...(includeProgress ? { level: row.level, notes: row.notes } : {}),
     name: row.name,
     description: row.description,
     color: row.color,
@@ -236,7 +245,11 @@ function parseFolder(value: unknown, index: number): ExportFolder {
 function parseSubject(value: unknown, where: string, folderCount = 0, index = 0): ExportSubject {
   const input = record(value, where);
   const color = SUBJECT_COLORS.includes(input.color as SubjectColor) ? (input.color as SubjectColor) : "green";
+  const type = isSubjectType(input.type) ? input.type : "subject";
   return {
+    type,
+    level: isLevel(input.level) ? input.level : null,
+    notes: text(input.notes, `${where} notes`, MAX_NOTES_LENGTH),
     name: text(input.name, `${where} name`, 80, true),
     description: text(input.description, `${where} description`, 500),
     color,
@@ -246,7 +259,8 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
     folder: folderRef(input.folder, folderCount, where),
     position: position(input.position, index),
     archivedAt: date(input.archivedAt),
-    units: list(input.units, `${where} units`).map((unitValue, unitIndex) => {
+    // A tracker holds no units, whatever the file says.
+    units: (type === "tracker" ? [] : list(input.units, `${where} units`)).map((unitValue, unitIndex) => {
       const unitWhere = `${where} unit ${unitIndex + 1}`;
       const unit = record(unitValue, unitWhere);
       return {
@@ -318,8 +332,8 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
       const folder = subject.folder ?? null;
       const at = subject.position ?? subjectIndex;
       db.run(
-        "INSERT INTO subjects (id, user_id, name, description, color, gradient_start, gradient_end, icon, folder_id, position, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [subjectId, userId, subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, folder === null ? null : folderIds[folder]!, folder === null ? offset + at : at, subject.archivedAt ?? null, now, now],
+        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, folder_id, position, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, folder === null ? null : folderIds[folder]!, folder === null ? offset + at : at, subject.archivedAt ?? null, now, now],
       );
       subject.units.forEach((unit, unitIndex) => {
         const unitId = crypto.randomUUID();

@@ -63,7 +63,7 @@ export function ImportPanel({ onImported }: { onImported?: (result: ImportResult
         onDrop={drop}
         disabled={busy}
       >
-        <IconFileUpload size={32} className="text-eel-blue" aria-hidden="true" />
+        <IconFileUpload size={32} className="text-secondary" aria-hidden="true" />
         <span className="font-extrabold text-ink">{busy ? "Importing…" : "Drop a .json file or click to choose"}</span>
         <span className="text-xs font-semibold text-wolf">haloLesson backups, shared subjects, or agent JSON output</span>
       </button>

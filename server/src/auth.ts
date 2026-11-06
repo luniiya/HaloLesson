@@ -32,6 +32,7 @@ export interface UserRow {
   is_admin: number;
   username_changed_at: string | null;
   accent_color: string | null;
+  secondary_color: string | null;
 }
 
 interface SessionRow {
@@ -52,6 +53,7 @@ export function toUser(row: UserRow): User {
     isAdmin: row.is_admin === 1,
     usernameChangedAt: row.username_changed_at,
     accentColor: row.accent_color,
+    secondaryColor: row.secondary_color,
   };
 }
 
@@ -200,6 +202,7 @@ async function insertUser(username: string, password: string, email: string | nu
     is_admin: isAdmin ? 1 : 0,
     username_changed_at: null,
     accent_color: null,
+    secondary_color: null,
   };
   db.run("INSERT INTO users (id, username, email, password_hash, created_at, is_admin) VALUES (?, ?, ?, ?, ?, ?)", [
     row.id,
@@ -266,7 +269,7 @@ export function endSession(req: Request): void {
 export async function updateAccount(
   userId: string,
   currentToken: string | null,
-  updates: { username?: string; email?: string | null; password?: string; avatar?: string | null; accentColor?: string | null; currentPassword?: string },
+  updates: { username?: string; email?: string | null; password?: string; avatar?: string | null; accentColor?: string | null; secondaryColor?: string | null; currentPassword?: string },
 ): Promise<User> {
   const row = userRow(userId);
   const sensitive = updates.username !== undefined || updates.email !== undefined || updates.password !== undefined;
@@ -295,6 +298,8 @@ export async function updateAccount(
   if (updates.password !== undefined) checkPassword(updates.password);
   const accentColor = updates.accentColor === null ? null : updates.accentColor?.toLowerCase();
   if (accentColor != null && !isValidAccent(accentColor)) throw new Error("Accent color must be a hex color like #7c5cff");
+  const secondaryColor = updates.secondaryColor === null ? null : updates.secondaryColor?.toLowerCase();
+  if (secondaryColor != null && !isValidAccent(secondaryColor)) throw new Error("Secondary color must be a hex color like #ec4f9a");
   const passwordHash = updates.password === undefined ? null : await Bun.password.hash(updates.password);
 
   db.transaction(() => {
@@ -308,6 +313,7 @@ export async function updateAccount(
     }
     if (updates.avatar !== undefined) db.run("UPDATE users SET avatar = ? WHERE id = ?", [updates.avatar, userId]);
     if (accentColor !== undefined) db.run("UPDATE users SET accent_color = ? WHERE id = ?", [accentColor, userId]);
+    if (secondaryColor !== undefined) db.run("UPDATE users SET secondary_color = ? WHERE id = ?", [secondaryColor, userId]);
   })();
   return toUser(userRow(userId));
 }

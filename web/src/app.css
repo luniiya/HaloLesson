@@ -1,10 +1,34 @@
 @import "tailwindcss";
 
+/* $lib/theme toggles .dark on <html> (Auto follows the system). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* The user's accent color (set on <html> by $lib/theme); every shade derives from it. */
 :root {
+  color-scheme: light;
   --accent: #7c5cff;
   --accent-shade: color-mix(in oklab, var(--accent) 90%, black);
   --accent-dark: color-mix(in oklab, var(--accent) 70%, black);
+  /* Selected and active states; set per user like the accent. */
+  --secondary: #ec4f9a;
+}
+
+/* Duolingo's dark mode: the neutral tokens flip, so components need no dark: variants. */
+:root.dark {
+  color-scheme: dark;
+  --color-surface: #131f24;
+  --color-eel: #202f36;
+  --color-swan: #37464f;
+  --color-ink: #f1f7fb;
+  --color-wolf: #b4c4cc;
+  --color-hare: #52656d;
+  --color-secondary-pale: color-mix(in oklab, var(--secondary) 24%, #131f24);
+  --color-accent-pale: color-mix(in oklab, var(--accent) 30%, #131f24);
+}
+
+/* Deep accent is a shadow shade; as text on dark it would vanish. */
+.dark .text-accent-deep {
+  color: var(--color-accent-light);
 }
 
 @theme {
@@ -15,9 +39,12 @@
   --color-accent-pale: color-mix(in oklab, var(--accent) 22%, white);
   --color-streak: #ff9600;
   --color-gem: #ce82ff;
-  --color-eel-blue: #1cb0f6;
+  --color-secondary: var(--secondary);
+  --color-secondary-deep: color-mix(in oklab, var(--secondary) 80%, black);
+  --color-secondary-pale: color-mix(in oklab, var(--secondary) 14%, white);
   --color-cardinal: #ff4b4b;
   --color-bee: #ffc800;
+  --color-surface: #ffffff;
   --color-eel: #f7f7f7;
   --color-swan: #e5e5e5;
   --color-ink: #3c3c3c;
@@ -33,7 +60,7 @@
   body {
     margin: 0;
     min-width: 320px;
-    background: white;
+    background: var(--color-surface);
     font-family: var(--font-sans);
   }
 
@@ -43,7 +70,7 @@
   }
 
   :focus-visible {
-    outline: 3px solid #1cb0f6;
+    outline: 3px solid var(--color-secondary);
     outline-offset: 3px;
   }
 
@@ -68,7 +95,7 @@
   }
 
   .button-secondary {
-    @apply border-2 border-swan bg-white text-wolf shadow-[0_2px_0_#e5e5e5] hover:bg-eel hover:text-ink active:translate-y-0.5 active:shadow-none;
+    @apply border-2 border-swan bg-surface text-wolf shadow-[0_2px_0_var(--color-swan)] hover:bg-eel hover:text-ink active:translate-y-0.5 active:shadow-none;
   }
 
   .button-danger {
@@ -84,7 +111,7 @@
   }
 
   .nav-item-active {
-    @apply border-2 border-eel-blue bg-blue-50 text-eel-blue;
+    @apply border-2 border-secondary bg-secondary-pale text-secondary;
   }
 
   .form-label {
@@ -92,7 +119,7 @@
   }
 
   .form-input {
-    @apply w-full rounded-xl border-2 border-swan bg-white px-4 py-3 text-base font-semibold text-ink outline-none transition placeholder:font-medium placeholder:text-hare focus:border-eel-blue focus:ring-3 focus:ring-eel-blue/20;
+    @apply w-full rounded-xl border-2 border-swan bg-surface px-4 py-3 text-base font-semibold text-ink outline-none transition placeholder:font-medium placeholder:text-hare focus:border-secondary focus:ring-3 focus:ring-secondary/20;
   }
 
   /* Square so the orbit is a true circle; nodes and the dashed ring share --orbit-r. */
@@ -142,16 +169,16 @@
   .level-ring::before {
     @apply pointer-events-none absolute inset-0 rounded-full;
     content: "";
-    background: conic-gradient(var(--level) var(--progress, 0%), var(--ring-track, #e5e5e5) 0);
+    background: conic-gradient(var(--level) var(--progress, 0%), var(--ring-track, var(--color-swan)) 0);
     mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-width)), #000 calc(100% - var(--ring-width) + 0.5px));
   }
 
   .level:hover .level-ring {
-    --ring-track: color-mix(in srgb, var(--level) 35%, #e5e5e5);
+    --ring-track: color-mix(in srgb, var(--level) 35%, var(--color-swan));
   }
 
   .level:focus-visible .level-ring {
-    @apply outline-3 outline-offset-2 outline-eel-blue;
+    @apply outline-3 outline-offset-2 outline-secondary;
   }
 
   /* The ledge is its own shape (straight sides, rounded bottom) so the button
@@ -221,12 +248,12 @@
 
   /* White fill hides the dashed orbit behind the ring. */
   .subject-node .level-ring {
-    @apply bg-white;
+    @apply bg-surface;
   }
 
   /* Names would collide around a full orbit, so they show on hover/focus. */
   .subject-node-tip {
-    @apply pointer-events-none absolute left-1/2 top-full mt-1 flex w-max max-w-48 -translate-x-1/2 translate-y-1 flex-col items-center rounded-xl border-2 border-swan bg-white px-3 py-2 text-center opacity-0 shadow-[0_3px_0_#e5e5e5] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100;
+    @apply pointer-events-none absolute left-1/2 top-full mt-1 flex w-max max-w-48 -translate-x-1/2 translate-y-1 flex-col items-center rounded-xl border-2 border-swan bg-surface px-3 py-2 text-center opacity-0 shadow-[0_3px_0_var(--color-swan)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100;
   }
 
   .subject-node-label {
@@ -273,11 +300,11 @@
   }
 
   .level-ring.drop-hover {
-    @apply outline-3 outline-offset-2 outline-eel-blue;
+    @apply outline-3 outline-offset-2 outline-secondary;
   }
 
   .orbit-slot-target .level-ring {
-    @apply outline-3 outline-offset-2 outline-dashed outline-eel-blue;
+    @apply outline-3 outline-offset-2 outline-dashed outline-secondary;
   }
 
   .library-dragging {
@@ -291,7 +318,7 @@
 
   .nav-item.drop-hover,
   .orbit-empty.drop-hover {
-    @apply bg-blue-50 text-eel-blue outline-eel-blue;
+    @apply bg-secondary-pale text-secondary outline-secondary;
   }
 
   .nav-item[data-drop="trash"].drop-hover {
@@ -300,7 +327,7 @@
 
   /* Edit mode's open/close toggle, pinned to a folder circle's lower right. */
   .orbit-expand {
-    @apply absolute bottom-1 right-1 z-10 grid size-8 place-items-center rounded-full border-2 border-swan bg-white text-wolf shadow-[0_2px_0_#e5e5e5] transition hover:border-eel-blue hover:text-eel-blue focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-eel-blue;
+    @apply absolute bottom-1 right-1 z-10 grid size-8 place-items-center rounded-full border-2 border-swan bg-surface text-wolf shadow-[0_2px_0_var(--color-swan)] transition hover:border-secondary hover:text-secondary focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-secondary;
   }
 
   .orbit-is-dragging .orbit-expand {
@@ -374,7 +401,7 @@
   }
 
   .orbit-empty {
-    @apply absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-swan bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-wide whitespace-nowrap text-wolf;
+    @apply absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-swan bg-surface px-4 py-2 text-xs font-extrabold uppercase tracking-wide whitespace-nowrap text-wolf;
   }
 
   @keyframes orbit-branch {
@@ -456,7 +483,7 @@
   }
 
   .skill-preview {
-    @apply relative mt-6 flex items-center gap-5 rounded-2xl border-2 border-swan bg-accent-pale/30 p-5 pr-9 shadow-[0_3px_0_#e5e5e5];
+    @apply relative mt-6 flex items-center gap-5 rounded-2xl border-2 border-swan bg-accent-pale/30 p-5 pr-9 shadow-[0_3px_0_var(--color-swan)];
   }
 
   @media (max-width: 639px) {
@@ -499,15 +526,15 @@
   }
 
   .practice-option {
-    @apply flex cursor-pointer items-center gap-4 rounded-2xl border-2 border-swan bg-white p-4 text-base font-extrabold text-wolf shadow-[0_3px_0_#e5e5e5] transition hover:bg-eel;
+    @apply flex cursor-pointer items-center gap-4 rounded-2xl border-2 border-swan bg-surface p-4 text-base font-extrabold text-wolf shadow-[0_3px_0_var(--color-swan)] transition hover:bg-eel;
   }
 
   .practice-option-selected {
-    @apply border-eel-blue bg-blue-50 text-eel-blue shadow-[0_3px_0_#1899d6];
+    @apply border-secondary bg-secondary-pale text-secondary shadow-[0_3px_0_var(--color-secondary-deep)];
   }
 
   .practice-option:has(input:focus-visible) {
-    @apply outline-3 outline-offset-3 outline-eel-blue;
+    @apply outline-3 outline-offset-3 outline-secondary;
   }
 
   .practice-feedback {
@@ -527,11 +554,11 @@
   }
 
   .agent-dialog {
-    @apply m-auto w-[calc(100%-2rem)] max-w-xl rounded-3xl border-0 bg-transparent p-0 backdrop:bg-ink/45 backdrop:backdrop-blur-sm;
+    @apply m-auto w-[calc(100%-2rem)] max-w-xl rounded-3xl border-0 bg-transparent p-0 backdrop:bg-black/50 backdrop:backdrop-blur-sm;
   }
 
   .agent-dialog-card {
-    @apply relative max-h-[85dvh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8;
+    @apply relative max-h-[85dvh] overflow-y-auto rounded-3xl bg-surface p-6 shadow-2xl sm:p-8;
   }
 
   .reveal-up {
@@ -561,11 +588,11 @@
   }
 
   .settings-tab-active {
-    @apply bg-blue-50 text-eel-blue hover:bg-blue-50 hover:text-eel-blue;
+    @apply bg-secondary-pale text-secondary hover:bg-secondary-pale hover:text-secondary;
   }
 
   .settings-card {
-    @apply rounded-2xl border-2 border-swan bg-white p-5 sm:p-6;
+    @apply rounded-2xl border-2 border-swan bg-surface p-5 sm:p-6;
   }
 
   .settings-card-title {
@@ -585,7 +612,7 @@
   }
 
   .toggle {
-    @apply relative inline-flex h-8 w-14 shrink-0 cursor-pointer items-center rounded-full bg-swan transition-colors has-[:checked]:bg-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-eel-blue;
+    @apply relative inline-flex h-8 w-14 shrink-0 cursor-pointer items-center rounded-full bg-swan transition-colors has-[:checked]:bg-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-secondary;
   }
 
   .toggle input {
@@ -601,11 +628,11 @@
   }
 
   .drop-zone {
-    @apply flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-swan bg-eel/50 px-5 py-8 text-center transition-colors hover:border-eel-blue hover:bg-blue-50/60;
+    @apply flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-swan bg-eel/50 px-5 py-8 text-center transition-colors hover:border-secondary hover:bg-secondary-pale/60;
   }
 
   .drop-zone-active {
-    @apply border-eel-blue bg-blue-50;
+    @apply border-secondary bg-secondary-pale;
   }
 
   .gradient-control {
@@ -613,23 +640,167 @@
   }
 
   .gradient-control input {
-    @apply size-9 cursor-pointer rounded-lg border-2 border-swan bg-white p-1;
+    @apply size-9 cursor-pointer rounded-lg border-2 border-swan bg-surface p-1;
   }
 
   .color-option {
-    @apply block size-9 rounded-full border-4 border-white ring-2 ring-swan transition hover:scale-105;
+    @apply block size-9 rounded-full border-4 border-surface ring-2 ring-swan transition hover:scale-105;
   }
 
   .color-option-selected {
     @apply ring-3 ring-ink;
   }
 
+  /* Self-rated level (LevelSlider): a gold coin with the number, and a chunky
+     slider whose filled part is gold up to the thumb. */
+  .level-bubble {
+    @apply grid size-18 shrink-0 place-content-center justify-items-center rounded-full bg-bee text-white shadow-[0_5px_0_#d99a00];
+  }
+
+  .level-bubble-unrated {
+    @apply bg-swan text-wolf shadow-[0_5px_0_var(--color-hare)];
+  }
+
+  .level-slider {
+    @apply h-4 w-full cursor-pointer appearance-none rounded-full outline-none;
+    background: linear-gradient(to right, var(--color-bee) var(--fill), var(--color-swan) var(--fill));
+  }
+
+  .level-slider-unrated {
+    background: var(--color-swan);
+  }
+
+  .level-slider::-webkit-slider-thumb {
+    @apply size-8 appearance-none rounded-full border-4 border-bee bg-surface shadow-[0_3px_0_#d99a00] transition-transform active:scale-110;
+  }
+
+  .level-slider::-moz-range-thumb {
+    @apply size-6 rounded-full border-4 border-bee bg-surface shadow-[0_3px_0_#d99a00];
+  }
+
+  /* Separate rules: a browser drops a whole rule over the other engine's pseudo. */
+  .level-slider-unrated::-webkit-slider-thumb {
+    @apply border-hare shadow-[0_3px_0_var(--color-swan)];
+  }
+
+  .level-slider-unrated::-moz-range-thumb {
+    @apply border-hare shadow-[0_3px_0_var(--color-swan)];
+  }
+
+  .level-slider:focus-visible::-webkit-slider-thumb {
+    @apply outline-3 outline-offset-2 outline-secondary;
+  }
+
+  /* Orbit circles drawn with arcs (SubjectNode's Ring): SVG so the ends are round. */
+  .level-ring-custom::before {
+    display: none;
+  }
+
+  .level-ring-svg {
+    @apply pointer-events-none absolute inset-0 size-full -rotate-90 overflow-visible;
+  }
+
+  .level-ring-arc {
+    fill: none;
+    /* --ring-width / --ring-size is about 4.6% at every circle size; the SVG is 100 units wide. */
+    stroke-width: 4.6;
+  }
+
+  .level-ring-track { stroke: var(--ring-track, var(--color-swan)); }
+  .level-ring-fill { stroke: var(--level); }
+  .level-ring-gold { stroke: var(--color-bee); }
+
+  /* Edit mode: the level as a pill on top of the circle; click it to rate. */
+  .orbit-level {
+    @apply absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-1/3 items-center gap-1 rounded-full border-2 border-bee bg-surface px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[#d99a00] shadow-[0_2px_0_#d99a00] transition hover:bg-bee hover:text-white focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-secondary;
+  }
+
+  .orbit-level-unrated {
+    @apply border-swan text-wolf shadow-[0_2px_0_var(--color-swan)] hover:border-bee;
+  }
+
+  /* Its partner in the ring's bottom gap: skills done, in the circle's color. */
+  .orbit-status {
+    @apply pointer-events-none absolute bottom-0 left-1/2 z-10 flex -translate-x-1/2 translate-y-1/4 items-center gap-1 rounded-full border-2 bg-surface px-2.5 py-1 text-xs font-black tracking-wide;
+    border-color: var(--level);
+    color: var(--level);
+    box-shadow: 0 2px 0 var(--level-dark);
+  }
+
+  .orbit-is-dragging .orbit-status,
+  .orbit-is-dragging .orbit-level {
+    @apply opacity-0;
+  }
+
+  /* The main page's one mode button: shows the mode you're in and flips it.
+     Raised and neutral while viewing; blue, like a selected answer, while editing. */
+  .mode-button {
+    @apply min-w-36 border-2 border-swan bg-surface text-wolf shadow-[0_3px_0_var(--color-swan)] hover:bg-eel hover:text-ink active:translate-y-0.5 active:shadow-none;
+  }
+
+  .mode-button-editing {
+    @apply border-secondary bg-secondary-pale text-secondary shadow-[0_3px_0_var(--color-secondary-deep)] hover:bg-secondary-pale hover:text-secondary;
+  }
+
+  /* Add menu (Subject / Tracker / Folder) under the page's Add button. */
+  .add-menu {
+    @apply absolute right-0 top-full z-40 mt-2 flex w-72 flex-col gap-1 rounded-2xl border-2 border-swan bg-surface p-2 shadow-[0_4px_0_var(--color-swan)];
+    animation: pop-in 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+
+  .add-menu-item {
+    @apply flex items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-eel;
+  }
+
+  .add-menu-icon {
+    @apply grid size-11 shrink-0 place-items-center rounded-xl text-white;
+  }
+
+  /* Theme picker: answer-card style, with a little page preview on top. */
+  .theme-option {
+    @apply flex flex-1 flex-col items-center gap-2.5 rounded-2xl border-2 border-b-4 border-swan bg-surface p-3 text-sm font-black uppercase tracking-wide text-wolf transition hover:bg-eel active:translate-y-0.5 active:border-b-2;
+  }
+
+  .theme-option-selected {
+    @apply border-secondary bg-secondary-pale text-secondary hover:bg-secondary-pale;
+    border-bottom-color: var(--color-secondary-deep);
+  }
+
+  .theme-preview {
+    @apply flex h-14 w-full flex-col gap-1.5 overflow-hidden rounded-xl border-2 p-2;
+  }
+
+  .theme-preview-light { background: #ffffff; border-color: #e5e5e5; --line: #e5e5e5; }
+  .theme-preview-dark { background: #131f24; border-color: #37464f; --line: #37464f; }
+  .theme-preview-auto { background: linear-gradient(115deg, #ffffff 50%, #131f24 50%); border-color: #afafaf; --line: #afafaf; }
+
+  .theme-preview-line {
+    @apply h-2 rounded-full;
+    background: var(--line);
+  }
+
   .icon-choice {
-    @apply grid h-11 min-w-11 cursor-pointer place-items-center rounded-xl border-2 border-swan bg-white px-2 text-sm font-extrabold text-wolf transition hover:bg-eel;
+    @apply grid h-11 min-w-11 cursor-pointer place-items-center rounded-xl border-2 border-swan bg-surface px-2 text-sm font-extrabold text-wolf transition hover:bg-eel;
   }
 
   .icon-choice-selected {
-    @apply border-eel-blue bg-eel text-ink;
+    @apply border-secondary bg-eel text-ink;
+  }
+
+  .icon-auto {
+    @apply flex w-full cursor-pointer items-center gap-3 rounded-2xl border-2 border-b-4 border-swan bg-surface px-3 py-2 text-left transition hover:bg-eel;
+  }
+
+  .icon-auto-selected {
+    @apply border-secondary bg-secondary-pale;
+  }
+
+  .icon-picker-grid {
+    @apply grid max-h-56 grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-2 overflow-y-auto rounded-xl border-2 border-swan p-2;
+  }
+
+  .icon-picker-grid .icon-choice {
+    @apply min-w-0 border-b-4 px-0;
   }
 
   .color-green { background: #58cc02; }

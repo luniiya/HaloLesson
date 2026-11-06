@@ -51,7 +51,7 @@ export default function PracticePage() {
     setResult(null);
   }
 
-  if (error && !session) return <div className="mx-auto max-w-2xl p-8"><p role="alert" className="rounded-xl bg-red-50 p-4 font-bold text-cardinal">{error}</p><Link to="/" className="mt-5 inline-block font-bold text-eel-blue">Back to subjects</Link></div>;
+  if (error && !session) return <div className="mx-auto max-w-2xl p-8"><p role="alert" className="rounded-xl bg-red-50 p-4 font-bold text-cardinal">{error}</p><Link to="/" className="mt-5 inline-block font-bold text-secondary">Back to subjects</Link></div>;
   if (!session) return <p className="p-12 text-center font-bold text-wolf">Preparing your practice…</p>;
   if (session.exercises.length === 0) return <div className="mx-auto max-w-xl px-5 py-16 text-center"><h1 className="text-2xl font-black">No exercises yet</h1><p className="mt-3 font-semibold text-wolf">This skill is ready for exercises. Lesson generation arrives in the next phase.</p><Link to={`/subjects/${session.subjectId}`} className="button button-primary mt-6">Back to path</Link></div>;
 
@@ -73,7 +73,7 @@ export default function PracticePage() {
           <p className="mt-3 font-semibold text-wolf">You practiced {session.skillTitle}.</p>
           <div className="mt-8 grid w-full grid-cols-2 gap-4">
             <div className="rounded-2xl border-2 border-swan p-5"><strong className="block text-3xl font-black text-accent-deep">{Math.round(correctCount / session.exercises.length * 100)}%</strong><span className="text-xs font-black uppercase text-wolf">Accuracy</span></div>
-            <div className="rounded-2xl border-2 border-swan p-5"><strong className="block text-3xl font-black text-eel-blue">{correctCount}/{session.exercises.length}</strong><span className="text-xs font-black uppercase text-wolf">Correct</span></div>
+            <div className="rounded-2xl border-2 border-swan p-5"><strong className="block text-3xl font-black text-secondary">{correctCount}/{session.exercises.length}</strong><span className="text-xs font-black uppercase text-wolf">Correct</span></div>
           </div>
           <Link to={`/subjects/${session.subjectId}`} className="button button-primary mt-8 w-full">Back to my path</Link>
         </main>

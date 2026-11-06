@@ -114,6 +114,7 @@ if (!userColumns.includes("avatar")) db.exec("ALTER TABLE users ADD COLUMN avata
 if (!userColumns.includes("is_admin")) db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
 if (!userColumns.includes("username_changed_at")) db.exec("ALTER TABLE users ADD COLUMN username_changed_at TEXT");
 if (!userColumns.includes("accent_color")) db.exec("ALTER TABLE users ADD COLUMN accent_color TEXT");
+if (!userColumns.includes("secondary_color")) db.exec("ALTER TABLE users ADD COLUMN secondary_color TEXT");
 
 // Databases created before admin roles existed: the oldest account becomes admin,
 // matching what a fresh install does for the first registered user.
@@ -199,4 +200,8 @@ if (!librarySubjectColumns.includes("position")) db.exec("ALTER TABLE subjects A
 if (!librarySubjectColumns.includes("icon")) db.exec("ALTER TABLE subjects ADD COLUMN icon TEXT");
 if (!librarySubjectColumns.includes("archived_at")) db.exec("ALTER TABLE subjects ADD COLUMN archived_at TEXT");
 if (!librarySubjectColumns.includes("deleted_at")) db.exec("ALTER TABLE subjects ADD COLUMN deleted_at TEXT");
+// Trackers (type "tracker") hold no units; level is self-rated 0-10, null until rated.
+if (!librarySubjectColumns.includes("type")) db.exec("ALTER TABLE subjects ADD COLUMN type TEXT NOT NULL DEFAULT 'subject'");
+if (!librarySubjectColumns.includes("level")) db.exec("ALTER TABLE subjects ADD COLUMN level INTEGER");
+if (!librarySubjectColumns.includes("notes")) db.exec("ALTER TABLE subjects ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
 db.exec("CREATE INDEX IF NOT EXISTS idx_subjects_folder ON subjects(user_id, folder_id)");

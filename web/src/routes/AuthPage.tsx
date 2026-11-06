@@ -23,7 +23,7 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && user) return <Navigate to="/" replace />;
-  if (!info) return <div className="grid min-h-dvh place-items-center bg-white font-bold text-wolf">Loading…</div>;
+  if (!info) return <div className="grid min-h-dvh place-items-center bg-surface font-bold text-wolf">Loading…</div>;
   if (info.needsSetup && !settingUp) return <Navigate to="/setup" replace />;
   if (!info.needsSetup && settingUp) return <Navigate to="/login" replace />;
   const { requireEmail, requireStrongPasswords, signupEnabled } = info.settings;
@@ -56,18 +56,18 @@ export default function AuthPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-white text-ink lg:grid lg:grid-cols-[1.08fr_0.92fr]">
+    <main className="min-h-dvh bg-surface text-ink lg:grid lg:grid-cols-[1.08fr_0.92fr]">
       <section className="auth-hero relative hidden min-h-dvh overflow-hidden bg-accent-pale/50 px-12 py-10 lg:flex lg:flex-col xl:px-20">
         <div className="relative z-10"><Logo /></div>
         <div className="relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center py-10 text-center">
-          <span className="mb-5 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-accent-deep shadow-[0_2px_0_var(--color-accent-pale)]">Practice, on your terms</span>
+          <span className="mb-5 rounded-full bg-surface px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-accent-deep shadow-[0_2px_0_var(--color-accent-pale)]">Practice, on your terms</span>
           <h1 className="text-[2.75rem] font-black leading-[1.08] tracking-tight text-ink xl:text-5xl">Don’t just remember it.<br /><span className="text-accent-deep">Know how to use it.</span></h1>
           <p className="mt-5 max-w-md text-lg font-semibold leading-7 text-wolf">Turn what you’re learning into skills you can practice, revisit, and truly master.</p>
           <BookArtwork className="mascot-float mt-4 w-72 xl:w-80" />
           <div className="flex flex-wrap justify-center gap-3 text-xs font-extrabold text-accent-deep">
-            <span className="rounded-full bg-white/80 px-4 py-2">Your subjects</span>
-            <span className="rounded-full bg-white/80 px-4 py-2">Real exercises</span>
-            <span className="rounded-full bg-white/80 px-4 py-2">Visible mastery</span>
+            <span className="rounded-full bg-surface/80 px-4 py-2">Your subjects</span>
+            <span className="rounded-full bg-surface/80 px-4 py-2">Real exercises</span>
+            <span className="rounded-full bg-surface/80 px-4 py-2">Visible mastery</span>
           </div>
         </div>
         <p className="relative z-10 text-center text-xs font-bold text-wolf">Built to complement Anki, not replace it.</p>
@@ -76,7 +76,7 @@ export default function AuthPage() {
       <section className="flex min-h-dvh items-center justify-center px-5 py-8 sm:px-10 lg:px-12">
         <div className="w-full max-w-[420px]">
           <div className="mb-10 text-center lg:hidden"><Logo /></div>
-          <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-eel-blue">{settingUp ? "First-time setup" : registering ? "Start your path" : "Good to see you"}</p>
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-secondary">{settingUp ? "First-time setup" : registering ? "Start your path" : "Good to see you"}</p>
           <h2 className="text-3xl font-black tracking-tight">{settingUp ? "Create the admin account" : registering ? "Create your learning space" : "Welcome back"}</h2>
           <p className="mb-7 mt-2 text-[15px] font-semibold leading-6 text-wolf">
             {settingUp

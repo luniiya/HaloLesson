@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { libraryStates, type Library } from "@halolesson/shared";
 import { entriesIn, type Entry } from "$lib/library";
-import SubjectNode, { FolderNode } from "./SubjectNode";
 
 // Stage coordinates are percent of the (square) stage. Ring nodes sit on
 // --orbit-r (40%); an open folder fans its contents out away from the center.
@@ -155,33 +154,4 @@ export function OrbitStage({ placed, chain, onOpenChange, center, decorations, c
 export function toggleIn(chain: string[], depth: number, id: string): string[] {
   const kept = chain.slice(0, depth);
   return chain[depth] === id ? kept : [...kept, id];
-}
-
-interface Props {
-  library: Library;
-  // Chain of open folders, outermost first.
-  open: string[];
-  onOpenChange: (open: string[]) => void;
-  center: ReactNode;
-  decorations?: ReactNode;
-}
-
-// The main-page orbit outside Edit mode. Clicking a folder opens it in place:
-// its subjects and folders branch out on dashed lines.
-export default function OrbitView({ library, open, onOpenChange, center, decorations }: Props) {
-  const { placed, chain } = layoutOrbit(library, open);
-  return (
-    <OrbitStage placed={placed} chain={chain} onOpenChange={onOpenChange} center={center} decorations={decorations}>
-      {placed.map((node, index) => {
-        const key = nodeKey(node);
-        const style = nodeStyle(node, index);
-        if (!node.entry) return <div key={key} className="orbit-empty" style={style}>Empty folder</div>;
-        const expanded = node.entry.kind === "folder" && chain[node.depth] === node.entry.item.id;
-        const place = { style, className: `${node.depth ? "orbit-child" : ""} ${expanded ? "orbit-open" : ""}`, expanded };
-        if (node.entry.kind === "subject") return <SubjectNode key={key} subject={node.entry.item} place={place} />;
-        const folder = node.entry.item;
-        return <FolderNode key={key} folder={folder} count={activeEntries(library, folder.id).length} place={place} onOpen={() => onOpenChange(toggleIn(chain, node.depth, folder.id))} />;
-      })}
-    </OrbitStage>
-  );
 }

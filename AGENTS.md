@@ -3,6 +3,11 @@
 - **Never commit, branch, stash or push.** The user manages git. Leave your changes
   uncommitted in the working tree.
 
+- **Don't visually check the app yourself while the user is working with you** (no
+  bwl/browser screenshots of the UI, no "let me take a look"). The user does the visual
+  testing. Typecheck and tests are your verification. Check visually only when you are
+  working fully autonomously (no user in the loop), or when the user explicitly asks.
+
 - Whenever searching online, if the search tool fails, just use curl from
   this computer.
 

@@ -6,6 +6,7 @@ import { api } from "$lib/api";
 import { useLibraryEvents } from "$lib/events";
 import ShareDialog from "../components/ShareDialog";
 import SkillPath from "../components/SkillPath";
+import TrackerView from "../components/TrackerView";
 
 export default function SubjectPage() {
   const { subjectId = "" } = useParams();
@@ -46,29 +47,33 @@ export default function SubjectPage() {
     return () => clearTimeout(timer);
   }, [live, detail]);
 
-  if (error) return <div className="mx-auto max-w-3xl p-8"><p role="alert" className="rounded-xl bg-red-50 p-4 font-bold text-cardinal">{error}</p><Link to="/" className="mt-5 inline-block font-extrabold text-eel-blue">Back to subjects</Link></div>;
+  if (error) return <div className="mx-auto max-w-3xl p-8"><p role="alert" className="rounded-xl bg-red-50 p-4 font-bold text-cardinal">{error}</p><Link to="/" className="mt-5 inline-block font-extrabold text-secondary">Back to subjects</Link></div>;
   if (!detail) return <p className="p-12 text-center font-bold text-wolf">Loading subject…</p>;
+  const isTracker = detail.subject.type === "tracker";
 
   return (
     <div className="mx-auto max-w-4xl px-5 pb-24 pt-8 sm:px-8 md:pb-12">
       <Link to="/" className="inline-flex items-center gap-2 text-sm font-extrabold text-wolf hover:text-accent-deep"><IconArrowLeft size={18} />All subjects</Link>
       <header className="mt-6 border-b-2 border-swan pb-8">
         <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-owl-deep">
-          Practice path
+          {isTracker ? "Tracker" : "Practice path"}
           {live && <span className="inline-flex items-center gap-1 rounded-full bg-gem/15 px-2 py-0.5 text-[11px] tracking-wider text-gem" role="status"><IconBroadcast size={13} aria-hidden="true" />Updated live</span>}
         </p>
         <div className="mt-1 flex items-center justify-between gap-4">
           <h1 className="min-w-0 text-3xl font-black">{detail.subject.name}</h1>
-          <button type="button" className="button button-secondary shrink-0 gap-2" onClick={() => setSharing(true)}>
-            <IconShare size={19} />Share
-          </button>
+          {!isTracker && (
+            <button type="button" className="button button-secondary shrink-0 gap-2" onClick={() => setSharing(true)}>
+              <IconShare size={19} />Share
+            </button>
+          )}
         </div>
-        <p className="mt-2 font-semibold leading-6 text-wolf">{detail.subject.description || "Your skills and practice progress will live here."}</p>
+        {(detail.subject.description || !isTracker) && <p className="mt-2 font-semibold leading-6 text-wolf">{detail.subject.description || "Your skills and practice progress will live here."}</p>}
       </header>
+      {isTracker && <TrackerView subject={detail.subject} />}
       {sharing && <ShareDialog subjectId={subjectId} onClose={() => setSharing(false)} />}
-      {detail.units.length === 0 ? (
+      {isTracker ? null : detail.units.length === 0 ? (
         <section className="py-16 text-center">
-          <div className="mx-auto mb-5 grid size-20 place-items-center rounded-full bg-blue-50 text-eel-blue" aria-hidden="true"><IconCircleDashed size={38} /></div>
+          <div className="mx-auto mb-5 grid size-20 place-items-center rounded-full bg-secondary-pale text-secondary" aria-hidden="true"><IconCircleDashed size={38} /></div>
           <h2 className="text-2xl font-black">This path is ready for skills</h2>
           <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-wolf">Use Connect agent to start building. Skills appear here as it builds them.</p>
         </section>

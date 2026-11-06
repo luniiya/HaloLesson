@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User } from "@halolesson/shared";
 import { api } from "./api";
-import { applyAccent } from "./theme";
+import { applyAccent, applySecondary } from "./theme";
 
 interface AuthContextValue {
   user: User | null;
@@ -36,7 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (user) applyAccent(user.accentColor);
+    if (!user) return;
+    applyAccent(user.accentColor);
+    applySecondary(user.secondaryColor);
   }, [user]);
 
   async function login(identifier: string, password: string) {

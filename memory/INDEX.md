@@ -15,7 +15,7 @@
 - [Account system port](halolesson/account-system-port.md) — 2026-11-06: port recoral setup/account/sessions/admin/settings/import-export
 
 ## user
-- [User preferences](user/preferences.md) — token-conscious (context may be cleared anytime), encourages heavy bwl use, casual style
+- [User preferences](user/preferences.md) — token-conscious, casual; NO unrequested bwl visual checks
 
 ## duolingo-ui
 - [Duolingo color palette](duolingo-ui/color-palette.md) — full token set: owl green family, streak orange, eel blue, surfaces, ink
@@ -29,3 +29,6 @@
 - [Agent connect design](halolesson/agent-connect-design.md) — dingcad-style token + commit API so agents build lessons live
 - [Dev instance settings](halolesson/dev-instance-settings.md) — complex password requirement is off on the local dev DB
 - [Share links](halolesson/share-links.md) — subject share link + preview page / export file design
+- [Dark mode](halolesson/dark-mode.md) — Auto/Light/Dark in Appearance, default Auto, recoral mechanism, Duolingo dark palette
+- [Subject icon picker](halolesson/subject-icon-picker.md) — create-subject form needs an icon choice
+- [Outside tracker idea](halolesson/outside-tracker-idea.md) — brainstorm: orbit item that tracks learning done outside the app

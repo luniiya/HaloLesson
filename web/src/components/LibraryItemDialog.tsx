@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { IconArchive, IconArrowRight, IconFolderOpen, IconTrash, IconX } from "@tabler/icons-react";
-import { SUBJECT_COLORS, SUBJECT_ICONS, libraryStates, type Folder, type Library, type Subject, type SubjectColor } from "@halolesson/shared";
+import { SUBJECT_COLORS, libraryStates, type Folder, type Library, type Subject, type SubjectColor, type SubjectIcon } from "@halolesson/shared";
 import { entryParent, folderPath, libraryApi, type Entry } from "$lib/library";
-import { subjectIcons } from "$lib/subjectIcons";
 import Button from "./Button";
+import IconPicker from "./IconPicker";
 import { defaultGradients } from "./CreateSubjectForm";
 
 interface Props {
@@ -56,7 +56,7 @@ export default function LibraryItemDialog({ entry, library, onOpenFolder, onChan
     <dialog ref={dialogRef} className="agent-dialog" onCancel={(event) => { event.preventDefault(); onClose(); }} onClick={(event) => { if (event.target === dialogRef.current) onClose(); }} aria-labelledby="item-dialog-title">
       <div className="agent-dialog-card">
         <button type="button" onClick={onClose} className="absolute right-4 top-3 rounded-lg p-2 text-wolf hover:bg-eel hover:text-ink" aria-label="Close dialog"><IconX size={22} /></button>
-        <h2 id="item-dialog-title" className="truncate pr-10 text-2xl font-black">{kind === "folder" ? "Edit folder" : "Edit subject"}</h2>
+        <h2 id="item-dialog-title" className="truncate pr-10 text-2xl font-black">{kind === "folder" ? "Edit folder" : item.type === "tracker" ? "Edit tracker" : "Edit subject"}</h2>
         {error && <p role="alert" className="notice-error mt-4">{error}</p>}
         {kind === "subject"
           ? <SubjectFields subject={item} onSave={(fields) => run(() => libraryApi.updateSubject(item.id, fields))} />
@@ -71,7 +71,7 @@ export default function LibraryItemDialog({ entry, library, onOpenFolder, onChan
           <div className="flex flex-wrap gap-3">
             {kind === "folder"
               ? <Button variant="secondary" className="gap-2" onClick={() => { onClose(); onOpenFolder(item.id); }}><IconFolderOpen size={19} />Open folder</Button>
-              : <Link to={`/subjects/${item.id}`} className="button button-secondary gap-2"><IconArrowRight size={19} />Open subject</Link>}
+              : <Link to={`/subjects/${item.id}`} className="button button-secondary gap-2"><IconArrowRight size={19} />{item.type === "tracker" ? "Open tracker" : "Open subject"}</Link>}
             <span className="flex-1" />
             <Button variant="ghost" className="gap-2" onClick={() => void run(() => libraryApi.archive(kind, item.id, true))}><IconArchive size={19} />Archive</Button>
             <Button variant="ghost" className="gap-2 text-cardinal hover:text-cardinal" onClick={() => void run(() => libraryApi.trash(kind, item.id))}><IconTrash size={19} />Trash</Button>
@@ -88,7 +88,7 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
   const [color, setColor] = useState<SubjectColor>(subject.color);
   const [gradientStart, setGradientStart] = useState(subject.gradientStart);
   const [gradientEnd, setGradientEnd] = useState(subject.gradientEnd);
-  const [icon, setIcon] = useState<string | null>(subject.icon);
+  const [icon, setIcon] = useState<SubjectIcon | null>(subject.icon);
 
   function chooseColor(option: SubjectColor) {
     setColor(option);
@@ -114,28 +114,15 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
           ))}
         </div>
       </fieldset>
-      <fieldset>
+      {subject.type === "subject" && <fieldset>
         <legend className="mb-2 text-sm font-extrabold text-wolf">Skill path gradient</legend>
         <div className="flex items-center gap-3 rounded-xl bg-eel p-3">
           <input type="color" value={gradientStart} onChange={(event) => setGradientStart(event.target.value)} aria-label="Gradient start color" />
           <div className="h-3 flex-1 rounded-full" style={{ background: `linear-gradient(90deg, ${gradientStart}, ${gradientEnd})` }} aria-hidden="true" />
           <input type="color" value={gradientEnd} onChange={(event) => setGradientEnd(event.target.value)} aria-label="Gradient end color" />
         </div>
-      </fieldset>
-      <fieldset className="sm:col-span-2">
-        <legend className="mb-2 text-sm font-extrabold text-wolf">Icon</legend>
-        <div className="flex flex-wrap gap-2" role="radiogroup">
-          <button type="button" role="radio" aria-checked={icon === null} onClick={() => setIcon(null)} className={`icon-choice ${icon === null ? "icon-choice-selected" : ""}`}>Auto</button>
-          {SUBJECT_ICONS.map((option) => {
-            const Symbol = subjectIcons[option];
-            return (
-              <button key={option} type="button" role="radio" aria-checked={icon === option} aria-label={option} title={option} onClick={() => setIcon(option)} className={`icon-choice ${icon === option ? "icon-choice-selected" : ""}`}>
-                <Symbol size={22} stroke={2.4} />
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      </fieldset>}
+      <div className="sm:col-span-2"><IconPicker value={icon} onChange={setIcon} name={name} description={description} /></div>
       <div className="flex justify-end sm:col-span-2"><Button type="submit">Save changes</Button></div>
     </form>
   );

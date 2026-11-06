@@ -1,4 +1,4 @@
-import { SUBJECT_ICONS } from "@halolesson/shared";
+import { LEVEL_LABELS, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_ICONS } from "@halolesson/shared";
 
 // The copy-paste prompt that connects an agent to one account, and the plain
 // text API reference it points to. Both are built from the origin the user's
@@ -54,6 +54,7 @@ If this project has an AGENTS.md or CLAUDE.md (or your equivalent), add a short 
 
 export function buildAgentSpec(origin: string): string {
   const ICONS = SUBJECT_ICONS.join("|");
+  const LEVEL_SCALE = LEVEL_LABELS.map((label, level) => `${level} ${label}`).join(", ");
   return `haloLesson agent API (protocol 1)
 =================================
 
@@ -64,8 +65,10 @@ MCP: the same operations are MCP tools at ${origin}/mcp (Streamable HTTP, same h
 Model
 -----
 folder { id, parentId (null: top level), name (max 80), color (hex like #7c5cff), position }   folders nest inside folders (max 200 folders)
-subject { id, name (max 80), description (max 500), color: green|blue|purple|orange|red, gradientStart, gradientEnd (hex like #58cc02),
-          icon: ${ICONS}|null, folderId (null: top level), position }
+subject { id, type: subject|tracker, name (max 80), description (max 500), color: green|blue|purple|orange|red, gradientStart, gradientEnd (hex like #58cc02),
+          icon: ${ICONS}|null, level (0-${MAX_LEVEL} or null), notes (max ${MAX_NOTES_LENGTH}), folderId (null: top level), position }
+A tracker (type "tracker") is a subject with no units: it tracks something I learn outside haloLesson. Its level is my
+self-rating (${LEVEL_SCALE}); subjects have a level too. Only set a level when I tell you mine.
 position is the 0-based order among the folders and subjects under the same parent.
   unit { id, subjectId, title (max 120), description (max 500), position }
     skill { id, unitId, title (max 120), description (max 500), position, exercises[] }
@@ -78,7 +81,7 @@ Limits: 500 subjects, 200 folders, 100 units per subject, 100 skills per unit, 5
 Reads
 -----
 GET /api/agent/library               -> { revision, folders: [{ id, parentId, name, color, position, state, deletedAt?, purgesAt? }],
-                                          subjects: [{ id, name, description, icon, folderId, position, state, unitCount, skillCount, updatedAt, deletedAt?, purgesAt? }] }
+                                          subjects: [{ id, type, name, description, icon, folderId, position, state, unitCount, skillCount, completedCount, level, updatedAt, deletedAt?, purgesAt? }] }
                                         state is active | archived | trashed (inherited from folders above). Trashed items are listed until purgesAt.
 GET /api/agent/subjects/:id          -> { revision, subject, units: [{ id, title, description, skills: [{ id, title, description, stars, mastery, exercises }] }] }
 GET /api/agent/progress[?subjectId=] -> { revision, skills: [{ skillId, skillTitle, subjectId, subjectName, stars, mastery, correctAttempts, totalAttempts, lastPracticedAt }],
@@ -93,7 +96,7 @@ POST /api/agent/commits
 -> { revision, op, result }
 
 Exactly one command per request. Commands:
-  { "op": "putSubject", "subject": { id?, name, description?, color?, gradientStart?, gradientEnd? } }      result { id }
+  { "op": "putSubject", "subject": { id?, type?, name, description?, color?, gradientStart?, gradientEnd?, level?, notes? } }   result { id }
   { "op": "putUnit",    "unit":    { id?, subjectId, title, description?, position? } }                     result { id }
   { "op": "putSkill",   "skill":   { id?, unitId, title, description?, position?, exercises? } }            result { id, exerciseIds }
   { "op": "putFolder", "folder": { id?, name, color?, parentId?, position? } }                              result { id }
@@ -107,6 +110,7 @@ Exactly one command per request. Commands:
   Passing a different subjectId/unitId moves the record.
 - skill.exercises, when given, is the skill's complete list in order. Items with an existing exercise id are updated (the learner keeps their history),
   items without id are created, and existing exercises you leave out are deleted. Omit exercises to keep them untouched.
+- putSubject's type ("subject" by default, or "tracker") is set on creation and never changes. putUnit on a tracker fails.
 - putSubject also takes icon, folderId (move into a folder; null for the top level) and position. putFolder with parentId nests a folder in another.
 - Archive hides a subject or folder (and what is inside it) from the main page without deleting anything; archiveItem with archived:false brings it back.
 - Trash: trashItem and deleteSubject only move a subject or folder (with its contents) to the trash. The server deletes it for good 30 days later

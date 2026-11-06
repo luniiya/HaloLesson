@@ -15,3 +15,7 @@ type: decision
 - Not themed on purpose: subject colors, gold perfected levels, yellow halo, blue focus/nav-selected highlights.
 
 Related: [[halolesson-branding]]
+
+*(2026-11-07)* User asked why selected/active things are blue (Duolingo eel-blue). Decision (Claude recommended, building): add a per-user **secondary color** (default pink #ec4f9a) for selected/active states; accent stays for primary buttons.
+
+*(2026-11-07, built)* users.secondary_color (User.secondaryColor, DEFAULT_SECONDARY #ec4f9a), PATCH /api/account secondaryColor. CSS: --secondary var -> tokens secondary / secondary-deep / secondary-pale (replaced all eel-blue/blue-50 selected-state uses + focus outline). web lib/theme.ts applySecondary/cachedSecondary. Appearance page: shared ColorCard for both colors. Not in data export (accent is not either).

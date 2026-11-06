@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#58cc02" />
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      // Before first paint so dark mode never flashes white; $lib/theme takes over after.
+      (function () {
+        try {
+          var stored = localStorage.getItem("halolesson:theme");
+          var dark = stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+          if (dark) {
+            document.documentElement.classList.add("dark");
+            document.querySelector('meta[name="theme-color"]').setAttribute("content", "#131f24");
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="description" content="Practice what you know, not just what you remember." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

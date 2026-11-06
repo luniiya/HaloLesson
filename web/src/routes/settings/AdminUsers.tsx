@@ -113,7 +113,7 @@ export default function AdminUsers() {
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 font-extrabold">
                       <span className="truncate">{user.username}</span>
-                      {user.isAdmin && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-eel-blue">Admin</span>}
+                      {user.isAdmin && <span className="rounded-full bg-secondary-pale px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-secondary">Admin</span>}
                       {user.id === me.id && <span className="rounded-full bg-accent-pale px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-accent-deep">You</span>}
                     </p>
                     <p className="truncate text-xs font-semibold text-wolf">

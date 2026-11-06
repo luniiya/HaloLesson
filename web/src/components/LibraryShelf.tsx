@@ -38,12 +38,12 @@ export default function LibraryShelf({ library, view, onChanged }: { library: Li
           const Symbol = entry.kind === "folder" ? IconFolder : iconFor(entry.item);
           const left = view === "trashed" && entry.item.deletedAt ? daysUntilPurge(entry.item.deletedAt) : null;
           return (
-            <li key={entry.item.id} className="flex items-center gap-3 rounded-2xl border-2 border-swan bg-white p-3 shadow-[0_3px_0_#e5e5e5] sm:p-4">
+            <li key={entry.item.id} className="flex items-center gap-3 rounded-2xl border-2 border-swan bg-surface p-3 shadow-[0_3px_0_var(--color-swan)] sm:p-4">
               <span className="grid size-12 shrink-0 place-items-center rounded-2xl text-white opacity-80 shadow-[0_4px_0_var(--dark)]" style={{ background: color, ["--dark" as string]: dark }} aria-hidden="true"><Symbol size={26} stroke={2.4} /></span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-black">{entry.item.name}</p>
                 <p className="text-xs font-extrabold uppercase tracking-wide text-wolf">
-                  {entry.kind === "folder" ? "Folder" : "Subject"}{left !== null && ` · gone for good in ${left} ${left === 1 ? "day" : "days"}`}
+                  {entry.kind === "folder" ? "Folder" : entry.item.type === "tracker" ? "Tracker" : "Subject"}{left !== null && ` · gone for good in ${left} ${left === 1 ? "day" : "days"}`}
                 </p>
               </div>
               <Button variant="secondary" className="shrink-0 gap-2" onClick={() => void bringBack(entry.kind, entry.item.id)}>

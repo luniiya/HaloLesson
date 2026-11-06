@@ -1,4 +1,4 @@
-import { APP_VERSION, isSubjectIcon, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type User } from "@halolesson/shared";
+import { APP_VERSION, isSubjectIcon, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type User } from "@halolesson/shared";
 import { resolve, sep } from "node:path";
 import {
   adminCreateUser,
@@ -201,6 +201,7 @@ const server = Bun.serve({
             password: optionalString(input.password) || undefined,
             avatar,
             accentColor: input.accentColor === null ? null : optionalString(input.accentColor),
+            secondaryColor: input.secondaryColor === null ? null : optionalString(input.secondaryColor),
             currentPassword: optionalString(input.currentPassword),
           }));
         } catch (error) {
@@ -408,7 +409,13 @@ const server = Bun.serve({
             color,
             stringField(input.gradientStart) || "#58cc02",
             stringField(input.gradientEnd) || "#1cb0f6",
-            { icon: isSubjectIcon(input.icon) ? input.icon : null, folderId: optionalId(input.folderId) },
+            {
+              icon: isSubjectIcon(input.icon) ? input.icon : null,
+              folderId: optionalId(input.folderId),
+              type: input.type === undefined ? undefined : (input.type as SubjectType),
+              level: input.level === undefined ? undefined : (input.level as number | null),
+              notes: optionalString(input.notes),
+            },
           );
           libraryChanged(user.id, subject.id);
           return Response.json(subject, { status: 201 });
@@ -434,6 +441,8 @@ const server = Bun.serve({
             gradientStart: optionalString(input.gradientStart),
             gradientEnd: optionalString(input.gradientEnd),
             icon: input.icon === null ? null : isSubjectIcon(input.icon) ? input.icon : undefined,
+            level: input.level === undefined ? undefined : (input.level as number | null),
+            notes: optionalString(input.notes),
           }),
         ),
     },

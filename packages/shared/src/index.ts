@@ -36,10 +36,14 @@ export interface User {
   usernameChangedAt: string | null;
   // Hex like "#7c5cff"; null means DEFAULT_ACCENT.
   accentColor: string | null;
+  // Selected and active states (current page, chosen option); null means DEFAULT_SECONDARY.
+  secondaryColor: string | null;
 }
 
 // The app's accent color drives buttons, highlights and the book artwork.
 export const DEFAULT_ACCENT = "#7c5cff";
+// Pink: pairs with the violet accent.
+export const DEFAULT_SECONDARY = "#ec4f9a";
 export const ACCENT_PRESETS = [
   { name: "Violet", color: "#7c5cff" },
   { name: "Ocean", color: "#1a9fe0" },
@@ -84,12 +88,57 @@ export const SUBJECT_COLORS = ["green", "blue", "purple", "orange", "red"] as co
 export type SubjectColor = (typeof SUBJECT_COLORS)[number];
 
 // Names of the icons a subject can wear; the web app maps each to a glyph.
-export const SUBJECT_ICONS = ["atom", "world", "math", "flask", "code", "palette", "book", "music", "language", "heart", "rocket", "bulb"] as const;
+export const SUBJECT_ICONS = [
+  "atom", "world", "math", "flask", "code", "palette", "book", "music", "language", "heart", "rocket", "bulb", "dna",
+  "microscope", "virology", "ecology", "astronomy", "mechanical", "electricity", "electronics", "civil", "architecture", "data",
+  "databases", "computer-science", "ai", "neuroscience", "statistics", "geology", "medicine", "pharmacy", "economics", "law",
+  "history", "philosophy", "sociology", "education", "literature", "literacy", "japanese", "finance",
+  "investing", "saving", "accounting", "business", "marketing", "public-speaking", "project", "politics",
+  "security", "networking", "web", "mobile", "satellites", "weather", "hydrology", "solar", "magnetism",
+  "signals", "geometry", "industry", "repair", "marine", "insects", "pets", "horse", "forestry", "gardening", "flowers",
+  "needle-thread", "knitting", "fashion", "cooking", "baking", "coffee", "nutrition", "woodworking", "painting", "drawing", "photography",
+  "film", "podcast", "singing", "guitar", "piano", "production", "theatre", "music-theory",
+  "dance", "fitness", "running", "cycling", "swimming", "yoga", "martial-arts", "fencing", "archery", "football",
+  "tennis", "snow", "competition", "chess", "gaming", "cards", "puzzles", "tabletop", "driving", "travel",
+  "aviation", "sailing", "navigation", "camping", "meditation", "3d", "graphic-design", "typography", "crafts", "sustainability",
+  "home", "writing",
+] as const;
 export type SubjectIcon = (typeof SUBJECT_ICONS)[number];
 
 export function isSubjectIcon(value: unknown): value is SubjectIcon {
   return typeof value === "string" && (SUBJECT_ICONS as readonly string[]).includes(value);
 }
+
+// A tracker sits in the library like a subject but holds no skills: it tracks
+// something the user learns outside haloLesson, through a self-rated level and notes.
+export const SUBJECT_TYPES = ["subject", "tracker"] as const;
+export type SubjectType = (typeof SUBJECT_TYPES)[number];
+
+export function isSubjectType(value: unknown): value is SubjectType {
+  return typeof value === "string" && (SUBJECT_TYPES as readonly string[]).includes(value);
+}
+
+// The self-rated level, 0 to MAX_LEVEL. The label tells the user what each step means.
+export const MAX_LEVEL = 10;
+export const LEVEL_LABELS = [
+  "Know nothing yet",
+  "Total beginner",
+  "Beginner",
+  "Learning the basics",
+  "Mid",
+  "Okay",
+  "Decent",
+  "Confident",
+  "Very good",
+  "Brilliant",
+  "The best",
+] as const;
+
+export function isLevel(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= MAX_LEVEL;
+}
+
+export const MAX_NOTES_LENGTH = 20_000;
 
 // Trashed subjects and folders are deleted for good this many days later.
 // Nobody (user or agent) can empty the trash earlier.
@@ -97,6 +146,7 @@ export const TRASH_RETENTION_DAYS = 30;
 
 export interface Subject {
   id: string;
+  type: SubjectType;
   name: string;
   description: string;
   color: SubjectColor;
@@ -113,6 +163,11 @@ export interface Subject {
   updatedAt: string;
   unitCount: number;
   skillCount: number;
+  // Skills practiced to at least one star, out of skillCount.
+  completedCount: number;
+  // Self-rated, 0 to MAX_LEVEL; null until the user rates themselves.
+  level: number | null;
+  notes: string;
 }
 
 export interface Folder {
@@ -264,6 +319,10 @@ export interface ExportSkill {
 }
 
 export interface ExportSubject {
+  // Missing in files made before trackers existed: "subject".
+  type?: SubjectType;
+  level?: number | null;
+  notes?: string;
   name: string;
   description: string;
   color: SubjectColor;

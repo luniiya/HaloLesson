@@ -42,7 +42,7 @@ export default function SharedPage() {
     return (
       <div className="mx-auto max-w-3xl p-8">
         <p role="alert" className="rounded-xl bg-red-50 p-4 font-bold text-cardinal">This link doesn't work anymore. The owner may have stopped sharing it.</p>
-        <Link to="/" className="mt-5 inline-block font-extrabold text-eel-blue">Back to subjects</Link>
+        <Link to="/" className="mt-5 inline-block font-extrabold text-secondary">Back to subjects</Link>
       </div>
     );
   }

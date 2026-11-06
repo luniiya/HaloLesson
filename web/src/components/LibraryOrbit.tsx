@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { IconFolder, IconMinus, IconPlus } from "@tabler/icons-react";
-import type { ItemKind, Library } from "@halolesson/shared";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { Link, useNavigate } from "react-router";
+import { IconCheck, IconFolder, IconMinus, IconPlus, IconStarFilled } from "@tabler/icons-react";
+import type { ItemKind, Library, Subject } from "@halolesson/shared";
 import { entriesIn, entryParent, libraryApi, type Entry } from "$lib/library";
 import { iconFor } from "$lib/subjectIcons";
 import { OrbitStage, activeEntries, layoutOrbit, nodeKey, nodeStyle, openChainTo, toggleIn, type Placed } from "./OrbitView";
-import { OrbitFace, folderColors, folderMeta, subjectColors, subjectMeta } from "./SubjectNode";
+import { OrbitFace, folderColors, folderMeta, subjectColors, subjectMeta, subjectRing } from "./SubjectNode";
 
 // Anything carrying data-drop="archive" | "trash" | "folder:<id>" | "folder:"
 // (the top level) accepts a dragged item, wherever it is on the page: folder
@@ -63,19 +65,27 @@ interface Drag {
 
 interface Props {
   library: Library;
+  // Chain of open folders, outermost first.
   open: string[];
   onOpenChange: (open: string[]) => void;
+  editing: boolean;
   center: ReactNode;
+  decorations?: ReactNode;
   onEdit: (entry: Entry) => void;
+  // Edit mode's level pill on a subject or tracker.
+  onRate: (subject: Subject) => void;
   onChanged: () => void;
   onError: (message: string) => void;
 }
 
-// The main-page orbit in Edit mode: circles wiggle, click one to customize it,
-// drag one onto another's slot to reorder (or move it to that circle's folder),
-// onto a folder to move it in, or onto Archive/Trash to put it away. Folders
-// open in place with their +/- button, the same way they do outside Edit mode.
-export default function LibraryOrbit({ library, open, onOpenChange, center, onEdit, onChanged, onError }: Props) {
+// The main-page orbit. Outside Edit mode a subject opens its path and a folder
+// opens in place, its contents branching out on dashed lines. In Edit mode the
+// circles wiggle: click one to customize it, drag one onto another's slot to
+// reorder (or move it to that circle's folder), onto a folder to move it in, or
+// onto Archive/Trash to put it away; folders open with their +/- button.
+// Both modes are this one component so toggling Edit never rebuilds the orbit.
+export default function LibraryOrbit({ library, open, onOpenChange, editing, center, decorations, onEdit, onRate, onChanged, onError }: Props) {
+  const navigate = useNavigate();
   const worldRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const suppressClick = useRef(false);
@@ -154,6 +164,14 @@ export default function LibraryOrbit({ library, open, onOpenChange, center, onEd
     window.addEventListener("pointercancel", stop);
   }
 
+  function openSubject(event: MouseEvent<HTMLAnchorElement>, to: string) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!document.startViewTransition || reducedMotion) return;
+    event.preventDefault();
+    document.startViewTransition(() => flushSync(() => navigate(to)));
+  }
+
   async function drop(entry: Entry, target: DropTarget) {
     const { kind, item } = entry;
     let action: () => Promise<unknown>;
@@ -180,7 +198,7 @@ export default function LibraryOrbit({ library, open, onOpenChange, center, onEd
   }
 
   return (
-    <OrbitStage placed={placed} chain={chain} onOpenChange={onOpenChange} center={center} worldRef={worldRef} className={drag?.moved ? "orbit-is-dragging" : ""}>
+    <OrbitStage placed={placed} chain={chain} onOpenChange={onOpenChange} center={center} decorations={decorations} worldRef={worldRef} className={drag?.moved ? "orbit-is-dragging" : ""}>
       {placed.map((node, index) => {
         const key = nodeKey(node);
         const entry = node.entry;
@@ -189,36 +207,69 @@ export default function LibraryOrbit({ library, open, onOpenChange, center, onEd
         const isFolder = entry.kind === "folder";
         const expanded = isFolder && chain[node.depth] === entry.item.id;
         const { color, dark } = isFolder ? folderColors(entry.item) : subjectColors(entry.item);
+        const ring = isFolder ? null : subjectRing(entry.item);
         const style = { ...nodeStyle(node, index), "--level": color, "--level-dark": dark, ...(dragged ? { left: `${drag.x}%`, top: `${drag.y}%` } : {}) } as CSSProperties;
-        const meta = isFolder ? folderMeta(activeEntries(shown, entry.item.id).length) : subjectMeta(entry.item);
+        const count = isFolder ? activeEntries(shown, entry.item.id).length : 0;
+        const meta = isFolder ? folderMeta(count) : subjectMeta(entry.item);
+        const face = (
+          <OrbitFace
+            Symbol={isFolder ? IconFolder : iconFor(entry.item)}
+            label={entry.item.name}
+            meta={meta}
+            drop={editing && isFolder && !dragged ? `folder:${entry.item.id}` : undefined}
+            ring={ring ?? undefined}
+          />
+        );
+        const toggle = () => onOpenChange(toggleIn(chain, node.depth, entry.item.id));
         return (
           <div
             key={key}
-            className={`subject-node-position orbit-editable ${node.depth ? "orbit-child" : ""} ${expanded ? "orbit-open" : ""} ${dragged ? "orbit-dragged" : ""} ${slotId === entry.item.id && !dragged ? "orbit-slot-target" : ""}`}
+            className={`subject-node-position ${editing ? "orbit-editable" : ""} ${node.depth ? "orbit-child" : ""} ${expanded ? "orbit-open" : ""} ${dragged ? "orbit-dragged" : ""} ${slotId === entry.item.id && !dragged ? "orbit-slot-target" : ""}`}
             style={style}
-            onPointerDown={(event) => start(event, entry)}
+            onPointerDown={editing ? (event) => start(event, entry) : undefined}
           >
-            <button
-              type="button"
-              className="level subject-node group"
-              aria-label={`Customize ${isFolder ? "folder " : ""}${entry.item.name}`}
-              onClick={() => { if (!suppressClick.current) onEdit(entry); }}
-            >
-              <OrbitFace
-                Symbol={isFolder ? IconFolder : iconFor(entry.item)}
-                label={entry.item.name}
-                meta={meta}
-                drop={isFolder && !dragged ? `folder:${entry.item.id}` : undefined}
-              />
-            </button>
-            {isFolder && !dragged && (
+            {editing ? (
+              <button
+                type="button"
+                className="level subject-node group"
+                aria-label={`Customize ${isFolder ? "folder " : ""}${entry.item.name}`}
+                onClick={() => { if (!suppressClick.current) onEdit(entry); }}
+              >
+                {face}
+              </button>
+            ) : isFolder ? (
+              <button type="button" className="level subject-node group" aria-label={`${expanded ? "Close" : "Open"} folder ${entry.item.name}, ${count} items`} aria-expanded={expanded} onClick={toggle}>
+                {face}
+              </button>
+            ) : (
+              <Link to={`/subjects/${entry.item.id}`} onClick={(event) => openSubject(event, `/subjects/${entry.item.id}`)} className="level subject-node group" aria-label={`Open ${entry.item.name}, ${meta}`}>
+                {face}
+              </Link>
+            )}
+            {editing && !isFolder && !dragged && (
+              <button
+                type="button"
+                className={`orbit-level ${entry.item.level === null ? "orbit-level-unrated" : ""}`}
+                aria-label={`Level of ${entry.item.name}: ${entry.item.level ?? "not rated"}. Change it`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => onRate(entry.item)}
+              >
+                <IconStarFilled size={12} aria-hidden="true" />{entry.item.level === null ? "Rate" : `Lv ${entry.item.level}`}
+              </button>
+            )}
+            {editing && !isFolder && entry.item.type === "subject" && !dragged && (
+              <span className="orbit-status" aria-label={`${entry.item.completedCount} of ${entry.item.skillCount} skills done`}>
+                <IconCheck size={12} stroke={3.5} aria-hidden="true" />{entry.item.completedCount}/{entry.item.skillCount}
+              </span>
+            )}
+            {editing && isFolder && !dragged && (
               <button
                 type="button"
                 className="orbit-expand"
                 aria-label={`${expanded ? "Close" : "Open"} folder ${entry.item.name}`}
                 aria-expanded={expanded}
                 onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => onOpenChange(toggleIn(chain, node.depth, entry.item.id))}
+                onClick={toggle}
               >
                 {expanded ? <IconMinus size={16} stroke={3} /> : <IconPlus size={16} stroke={3} />}
               </button>

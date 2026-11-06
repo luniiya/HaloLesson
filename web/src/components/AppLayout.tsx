@@ -21,13 +21,13 @@ export default function AppLayout() {
   const [agentOpen, setAgentOpen] = useState(false);
   const location = useLocation();
   if (loading) {
-    return <div className="grid min-h-dvh place-items-center bg-white font-bold text-wolf">Loading your lessons…</div>;
+    return <div className="grid min-h-dvh place-items-center bg-surface font-bold text-wolf">Loading your lessons…</div>;
   }
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
 
   return (
-    <div className="min-h-dvh bg-white text-ink">
-      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b-2 border-swan bg-white px-4 md:hidden">
+    <div className="min-h-dvh bg-surface text-ink">
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b-2 border-swan bg-surface px-4 md:hidden">
         <Logo />
         <div className="flex items-center gap-1">
           <Link to="/archive" data-drop="archive" aria-label="Archive" className="nav-item p-2"><IconArchive className="size-6" aria-hidden="true" /></Link>
@@ -35,7 +35,7 @@ export default function AppLayout() {
           <Link to="/settings" aria-label="Settings" className="ml-1 rounded-full"><Avatar user={user} className="size-9 text-sm" /></Link>
         </div>
       </header>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r-2 border-swan bg-white p-5 md:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r-2 border-swan bg-surface p-5 md:flex">
         <div className="px-2 py-2"><Logo /></div>
         <nav className="mt-8 flex flex-col gap-2" aria-label="Main navigation">
           <NavLink to="/" end className={navClass}>
@@ -70,7 +70,7 @@ export default function AppLayout() {
       <main className="min-h-dvh md:ml-60">
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-20 flex h-16 items-center justify-around border-t-2 border-swan bg-white md:hidden" aria-label="Mobile navigation">
+      <nav className="fixed inset-x-0 bottom-0 z-20 flex h-16 items-center justify-around border-t-2 border-swan bg-surface md:hidden" aria-label="Mobile navigation">
         <NavLink to="/" end className={({ isActive }) => `nav-item px-5 ${isActive ? "nav-item-active" : ""}`}><BookIcon /><span className="text-xs">Learn</span></NavLink>
         <button type="button" className="nav-item px-5 text-xs" onClick={() => setAgentOpen(true)}><SparkIcon />Create</button>
         <NavLink to="/settings" className={({ isActive }) => `nav-item px-5 ${isActive ? "nav-item-active" : ""}`}><IconSettings className="size-6" aria-hidden="true" /><span className="text-xs">Settings</span></NavLink>

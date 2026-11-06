@@ -1,9 +1,9 @@
-import { isSubjectIcon, libraryStates, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon } from "@halolesson/shared";
+import { isSubjectIcon, isSubjectType, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
 import { HEX_COLOR, list, parseExercise, record, text } from "../dataExport";
 import { db } from "../db";
 import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
 import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
-import { getSubject, nextPosition } from "../subjects";
+import { checkLevel, getSubject, nextPosition } from "../subjects";
 
 const MAX_SUBJECTS = 500;
 const MAX_UNITS_PER_SUBJECT = 100;
@@ -78,6 +78,7 @@ export function readLibrary(userId: string) {
     })),
     subjects: library.subjects.map((subject) => ({
       id: subject.id,
+      type: subject.type,
       name: subject.name,
       description: subject.description,
       icon: subject.icon,
@@ -86,6 +87,8 @@ export function readLibrary(userId: string) {
       state: states.get(subject.id),
       unitCount: subject.unitCount,
       skillCount: subject.skillCount,
+      completedCount: subject.completedCount,
+      level: subject.level,
       updatedAt: subject.updatedAt,
       ...trashInfo(subject.deletedAt),
     })),
@@ -102,7 +105,7 @@ export function readSubject(userId: string, subjectId: string) {
   const { subject, units } = detail;
   return {
     revision: libraryRevision(userId),
-    subject: { id: subject.id, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId },
+    subject: { id: subject.id, type: subject.type, level: subject.level, notes: subject.notes, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId },
     units: units.map((unit) => ({
       id: unit.id,
       title: unit.title,
@@ -245,7 +248,7 @@ function countOf(sql: string, param: string): number {
 function putSubject(userId: string, input: Record<string, unknown>) {
   const id = optionalId(input.id, "subject.id");
   const current = id
-    ? db.query<{ name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; folder_id: string | null }, [string, string]>(
+    ? db.query<{ type: SubjectType; name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; level: number | null; notes: string; folder_id: string | null }, [string, string]>(
         "SELECT * FROM subjects WHERE id = ? AND user_id = ?",
       ).get(id, userId)
     : null;
@@ -263,13 +266,19 @@ function putSubject(userId: string, input: Record<string, unknown>) {
     throw new AgentError(`subject.icon must be null or one of ${SUBJECT_ICONS.join(", ")}`, 400, "INVALID");
   }
   const icon = input.icon === undefined ? (current?.icon ?? null) : (input.icon as SubjectIcon | null);
+  // A tracker holds no units; its level (0-10, null = unrated) and notes are what it tracks.
+  if (input.type !== undefined && !isSubjectType(input.type)) throw new AgentError('subject.type must be "subject" or "tracker"', 400, "INVALID");
+  if (current && input.type !== undefined && input.type !== current.type) throw new AgentError("subject.type can't change after creation", 400, "INVALID");
+  const type: SubjectType = current?.type ?? (input.type as SubjectType | undefined) ?? "subject";
+  const level = input.level === undefined ? (current?.level ?? null) : checkLevel(input.level);
+  const notes = input.notes === undefined && current ? current.notes : text(input.notes ?? "", "subject.notes", MAX_NOTES_LENGTH);
   // folderId moves the subject into a folder (null: top level); position is its index among that folder's items.
   const folderId = input.folderId === undefined ? undefined : input.folderId === null ? null : requiredId(input.folderId, "subject.folderId");
   const index = position(input.position);
   const now = new Date().toISOString();
   if (current && id) {
-    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, updated_at = ? WHERE id = ?", [
-      name, description, color, gradientStart, gradientEnd, icon, now, id,
+    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, updated_at = ? WHERE id = ?", [
+      name, description, color, gradientStart, gradientEnd, icon, level, notes, now, id,
     ]);
     if (folderId !== undefined || index !== undefined) moveItem(userId, "subject", id, folderId === undefined ? current.folder_id : folderId, index);
     return { subjectId: folderId !== undefined || index !== undefined ? null : id, result: { id } };
@@ -279,8 +288,8 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   }
   if (folderId && !db.query("SELECT 1 FROM folders WHERE id = ? AND user_id = ?").get(folderId, userId)) throw notFound("Folder");
   const newId = crypto.randomUUID();
-  db.run("INSERT INTO subjects (id, user_id, name, description, color, gradient_start, gradient_end, icon, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-    newId, userId, name, description, color, gradientStart, gradientEnd, icon, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
+  db.run("INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+    newId, userId, type, name, description, color, gradientStart, gradientEnd, icon, level, notes, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
   ]);
   if (index !== undefined) moveItem(userId, "subject", newId, folderId ?? null, index);
   return { subjectId: newId, result: { id: newId } };
@@ -297,6 +306,9 @@ function putUnit(userId: string, input: Record<string, unknown>) {
   const subjectId = optionalId(input.subjectId, "unit.subjectId") ?? current?.subject_id;
   if (!subjectId) throw new AgentError("unit.subjectId is required for a new unit", 400, "INVALID");
   ownedSubject(userId, subjectId);
+  if (db.query("SELECT 1 FROM subjects WHERE id = ? AND type = 'tracker'").get(subjectId)) {
+    throw new AgentError("A tracker holds no units; only subjects (type \"subject\") have units and skills", 400, "INVALID");
+  }
   const title = input.title === undefined && current ? current.title : text(input.title, "unit.title", 120, true);
   const description = input.description === undefined && current ? current.description : text(input.description, "unit.description", 500);
   const index = position(input.position);
