@@ -1,8 +1,9 @@
-import { SUBJECT_COLORS, type ExerciseType, type SubjectColor } from "@halolesson/shared";
+import { isSubjectIcon, libraryStates, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon } from "@halolesson/shared";
 import { HEX_COLOR, list, parseExercise, record, text } from "../dataExport";
 import { db } from "../db";
 import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
-import { getSubject, listSubjects } from "../subjects";
+import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
+import { getSubject, nextPosition } from "../subjects";
 
 const MAX_SUBJECTS = 500;
 const MAX_UNITS_PER_SUBJECT = 100;
@@ -57,10 +58,37 @@ function exercisesOf(skillId: string): AgentExercise[] {
 
 // ---- Reads ----
 
+// Folders and subjects in every state. `state` is active, archived or trashed
+// (inherited from folders above); trashed items carry `purgesAt`, the moment
+// they are deleted for good. Siblings are ordered by position.
 export function readLibrary(userId: string) {
+  const library = getLibrary(userId);
+  const states = libraryStates(library);
+  const trashInfo = (deletedAt: string | null) => (deletedAt ? { deletedAt, purgesAt: purgeDate(deletedAt) } : {});
   return {
     revision: libraryRevision(userId),
-    subjects: listSubjects(userId).map(({ id, name, description, unitCount, skillCount, updatedAt }) => ({ id, name, description, unitCount, skillCount, updatedAt })),
+    folders: library.folders.map((folder) => ({
+      id: folder.id,
+      parentId: folder.parentId,
+      name: folder.name,
+      color: folder.color,
+      position: folder.position,
+      state: states.get(folder.id),
+      ...trashInfo(folder.deletedAt),
+    })),
+    subjects: library.subjects.map((subject) => ({
+      id: subject.id,
+      name: subject.name,
+      description: subject.description,
+      icon: subject.icon,
+      folderId: subject.folderId,
+      position: subject.position,
+      state: states.get(subject.id),
+      unitCount: subject.unitCount,
+      skillCount: subject.skillCount,
+      updatedAt: subject.updatedAt,
+      ...trashInfo(subject.deletedAt),
+    })),
   };
 }
 
@@ -74,7 +102,7 @@ export function readSubject(userId: string, subjectId: string) {
   const { subject, units } = detail;
   return {
     revision: libraryRevision(userId),
-    subject: { id: subject.id, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd },
+    subject: { id: subject.id, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId },
     units: units.map((unit) => ({
       id: unit.id,
       title: unit.title,
@@ -217,7 +245,7 @@ function countOf(sql: string, param: string): number {
 function putSubject(userId: string, input: Record<string, unknown>) {
   const id = optionalId(input.id, "subject.id");
   const current = id
-    ? db.query<{ name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string }, [string, string]>(
+    ? db.query<{ name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; folder_id: string | null }, [string, string]>(
         "SELECT * FROM subjects WHERE id = ? AND user_id = ?",
       ).get(id, userId)
     : null;
@@ -231,20 +259,30 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   if (typeof gradientStart !== "string" || !HEX_COLOR.test(gradientStart) || typeof gradientEnd !== "string" || !HEX_COLOR.test(gradientEnd)) {
     throw new AgentError("subject.gradientStart and gradientEnd must be hex colors like #58cc02", 400, "INVALID");
   }
+  if (input.icon !== undefined && input.icon !== null && !isSubjectIcon(input.icon)) {
+    throw new AgentError(`subject.icon must be null or one of ${SUBJECT_ICONS.join(", ")}`, 400, "INVALID");
+  }
+  const icon = input.icon === undefined ? (current?.icon ?? null) : (input.icon as SubjectIcon | null);
+  // folderId moves the subject into a folder (null: top level); position is its index among that folder's items.
+  const folderId = input.folderId === undefined ? undefined : input.folderId === null ? null : requiredId(input.folderId, "subject.folderId");
+  const index = position(input.position);
   const now = new Date().toISOString();
   if (current && id) {
-    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, updated_at = ? WHERE id = ?", [
-      name, description, color, gradientStart, gradientEnd, now, id,
+    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, updated_at = ? WHERE id = ?", [
+      name, description, color, gradientStart, gradientEnd, icon, now, id,
     ]);
-    return { subjectId: id, result: { id } };
+    if (folderId !== undefined || index !== undefined) moveItem(userId, "subject", id, folderId === undefined ? current.folder_id : folderId, index);
+    return { subjectId: folderId !== undefined || index !== undefined ? null : id, result: { id } };
   }
   if (countOf("SELECT COUNT(*) AS count FROM subjects WHERE user_id = ?", userId) >= MAX_SUBJECTS) {
     throw new AgentError(`At most ${MAX_SUBJECTS} subjects per account`, 400, "LIMIT");
   }
+  if (folderId && !db.query("SELECT 1 FROM folders WHERE id = ? AND user_id = ?").get(folderId, userId)) throw notFound("Folder");
   const newId = crypto.randomUUID();
-  db.run("INSERT INTO subjects (id, user_id, name, description, color, gradient_start, gradient_end, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-    newId, userId, name, description, color, gradientStart, gradientEnd, now, now,
+  db.run("INSERT INTO subjects (id, user_id, name, description, color, gradient_start, gradient_end, icon, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+    newId, userId, name, description, color, gradientStart, gradientEnd, icon, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
   ]);
+  if (index !== undefined) moveItem(userId, "subject", newId, folderId ?? null, index);
   return { subjectId: newId, result: { id: newId } };
 }
 
@@ -338,11 +376,41 @@ function putSkill(userId: string, input: Record<string, unknown>) {
   return { subjectId: crossSubject ? null : subjectId, result: { id: skillId, exerciseIds } };
 }
 
+function putFolder(userId: string, input: Record<string, unknown>) {
+  const id = optionalId(input.id, "folder.id");
+  const parentId = input.parentId === undefined ? undefined : input.parentId === null ? null : requiredId(input.parentId, "folder.parentId");
+  const index = position(input.position);
+  const name = input.name === undefined ? undefined : text(input.name, "folder.name", 80, true);
+  const color = input.color === undefined ? undefined : input.color;
+  if (color !== undefined && (typeof color !== "string" || !HEX_COLOR.test(color))) throw new AgentError("folder.color must be a hex color like #7c5cff", 400, "INVALID");
+  let folderId: string;
+  if (id) {
+    updateFolder(userId, id, { name, color });
+    folderId = id;
+  } else {
+    if (name === undefined) throw new AgentError("folder.name is required for a new folder", 400, "INVALID");
+    folderId = createFolder(userId, name, color, parentId ?? null).id;
+  }
+  if (id ? parentId !== undefined || index !== undefined : index !== undefined) {
+    const current = db.query<{ parent_id: string | null }, [string]>("SELECT parent_id FROM folders WHERE id = ?").get(folderId)!;
+    moveItem(userId, "folder", folderId, parentId === undefined ? current.parent_id : parentId, index);
+  }
+  return { subjectId: null, result: { id: folderId } };
+}
+
+function itemOp(userId: string, command: Record<string, unknown>, run: (kind: ItemKind, id: string) => void) {
+  const kind = command.kind;
+  if (kind !== "subject" && kind !== "folder") throw new AgentError("kind must be subject or folder", 400, "INVALID");
+  const id = requiredId(command.id, "id");
+  run(kind, id);
+  return { subjectId: null, result: { id, kind } };
+}
+
 function deleteRecord(userId: string, kind: "subject" | "unit" | "skill", id: string) {
   if (kind === "subject") {
-    ownedSubject(userId, id);
-    db.run("DELETE FROM subjects WHERE id = ?", [id]);
-    return { subjectId: null, result: { deleted: id } };
+    // Deleting a subject only moves it to the trash; it is purged after 30 days.
+    trashItem(userId, "subject", id);
+    return { subjectId: null, result: { deleted: id, trashed: true } };
   }
   const { subject_id: subjectId } = kind === "unit" ? ownedUnit(userId, id) : ownedSkill(userId, id);
   db.run(`DELETE FROM ${kind === "unit" ? "units" : "skills"} WHERE id = ?`, [id]);
@@ -355,11 +423,19 @@ function applyCommand(userId: string, command: Record<string, unknown>) {
     case "putSubject": return putSubject(userId, payload("subject"));
     case "putUnit": return putUnit(userId, payload("unit"));
     case "putSkill": return putSkill(userId, payload("skill"));
+    case "putFolder": return putFolder(userId, payload("folder"));
+    case "moveItem": {
+      const parentId = command.parentId === undefined || command.parentId === null ? null : requiredId(command.parentId, "parentId");
+      return itemOp(userId, command, (kind, id) => moveItem(userId, kind, id, parentId, position(command.position)));
+    }
+    case "archiveItem": return itemOp(userId, command, (kind, id) => setArchived(userId, kind, id, command.archived !== false));
+    case "trashItem": return itemOp(userId, command, (kind, id) => trashItem(userId, kind, id));
+    case "restoreItem": return itemOp(userId, command, (kind, id) => restoreItem(userId, kind, id));
     case "deleteSubject": return deleteRecord(userId, "subject", requiredId(command.id, "id"));
     case "deleteUnit": return deleteRecord(userId, "unit", requiredId(command.id, "id"));
     case "deleteSkill": return deleteRecord(userId, "skill", requiredId(command.id, "id"));
     default:
-      throw new AgentError("command.op must be one of putSubject, putUnit, putSkill, deleteSubject, deleteUnit, deleteSkill", 400, "UNKNOWN_OP");
+      throw new AgentError("command.op must be one of putSubject, putUnit, putSkill, putFolder, moveItem, archiveItem, trashItem, restoreItem, deleteSubject, deleteUnit, deleteSkill", 400, "UNKNOWN_OP");
   }
 }
 

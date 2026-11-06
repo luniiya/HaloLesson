@@ -9,6 +9,8 @@
 - [Branding](halolesson/branding.md) — prefer a rotating 3D open book on a display plate with a yellow halo, not a character mascot
 - [Accent color setting](halolesson/accent-color-setting.md) — per-user --accent var, default violet #7c5cff, Settings > Appearance
 - [Subject path UI](halolesson/subject-path-ui.md) — orbital subjects, circular skill nodes, custom subject gradients, gold perfected levels
+- [Feature parity rule](halolesson/feature-parity-rule.md) — every feature must exist in both the web UI and the agent interface
+- [Library organisation](halolesson/library-organisation.md) — Edit mode, nested folders, archive, 30-day trash, subject icons
 - [Data portability](halolesson/data-portability.md) — later: export/import plus sharing individual skills and whole subjects
 - [Account system port](halolesson/account-system-port.md) — 2026-11-06: port recoral setup/account/sessions/admin/settings/import-export
 

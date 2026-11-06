@@ -34,6 +34,24 @@ and keep cookies/logins.
 - The user can watch and take over every tab in the dashboard. On a captcha or
   a login you can't complete, ask them to finish it there, then continue.
 
+## Feature parity: user interface and agent interface
+
+Every feature must exist in **both** interfaces: the web UI (for people) and the
+agent interface (REST `/api/agent/*` commits and MCP tools, for LLM agents).
+Never ship a feature in only one of them.
+
+- Adding or changing a user-facing capability (rename, recolor, reorder, archive,
+  trash, restore, folders, sharing, ...)? Add the matching agent operation in
+  `server/src/agent/ops.ts`, expose it in `server/src/agent/mcp.ts`, and describe
+  it in `server/src/agent/prompt.ts` so agents know it exists.
+- Adding an agent operation? Give the user the same thing in the web UI.
+- Put the logic in one shared server module and call it from both the HTTP route and
+  the agent op, so the two can never drift apart.
+- Test both entry points (`server/test/<area>/`), and keep the data export/import format in sync
+  when the feature changes what is stored.
+- Exceptions need the user's explicit say-so (for example, destructive actions the
+  user wants to keep human-only, like permanently deleting from the trash).
+
 ## Tests
 
 Write unit tests for as much as you can, and keep them fast: test run time matters.

@@ -237,12 +237,164 @@
     @apply mt-0.5 text-xs font-extrabold uppercase tracking-wide text-wolf;
   }
 
+  /* Edit mode: circles wiggle and drag without scrolling the page on touch screens. */
+  .orbit-editable {
+    @apply cursor-grab select-none;
+    touch-action: none;
+  }
+
+  .orbit-editable .level-button {
+    animation: orbit-wiggle 0.5s ease-in-out infinite alternate;
+  }
+
+  .orbit-editable:nth-child(odd) .level-button {
+    animation-delay: -0.25s;
+  }
+
+  .orbit-is-dragging .subject-node-tip {
+    @apply opacity-0;
+  }
+
+  .orbit-dragged {
+    @apply pointer-events-none z-40 cursor-grabbing;
+    scale: 1.08;
+    filter: drop-shadow(0 12px 16px rgb(0 0 0 / 18%));
+  }
+
+  .orbit-dragged .level-button {
+    animation: none;
+  }
+
+  /* A folder hovered by a dragged item swells to say "drop in me"; a subject
+     whose slot the item would take gets a dashed accent ring. */
+  .level-ring.drop-hover .level-button {
+    scale: 1.15;
+    filter: brightness(1.08);
+  }
+
+  .level-ring.drop-hover {
+    @apply outline-3 outline-offset-2 outline-eel-blue;
+  }
+
+  .orbit-slot-target .level-ring {
+    @apply outline-3 outline-offset-2 outline-dashed outline-eel-blue;
+  }
+
+  .library-dragging {
+    @apply cursor-grabbing select-none;
+  }
+
+  .library-dragging .nav-item[data-drop],
+  .library-dragging .orbit-empty[data-drop] {
+    @apply outline-2 outline-offset-2 outline-dashed outline-swan;
+  }
+
+  .nav-item.drop-hover,
+  .orbit-empty.drop-hover {
+    @apply bg-blue-50 text-eel-blue outline-eel-blue;
+  }
+
+  .nav-item[data-drop="trash"].drop-hover {
+    @apply bg-red-50 text-cardinal outline-cardinal;
+  }
+
+  /* Edit mode's open/close toggle, pinned to a folder circle's lower right. */
+  .orbit-expand {
+    @apply absolute bottom-1 right-1 z-10 grid size-8 place-items-center rounded-full border-2 border-swan bg-white text-wolf shadow-[0_2px_0_#e5e5e5] transition hover:border-eel-blue hover:text-eel-blue focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-eel-blue;
+  }
+
+  .orbit-is-dragging .orbit-expand {
+    @apply opacity-0;
+  }
+
+  @keyframes orbit-wiggle {
+    from { rotate: -2.5deg; }
+    to { rotate: 2.5deg; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orbit-editable .level-button { animation: none; }
+  }
+
+  /* Outside Edit mode an open folder branches out; the world slides/shrinks
+     (inline transform from OrbitView) to keep the branches on screen. */
+  .orbit-world {
+    @apply absolute inset-0;
+    transform-origin: 50% 50%;
+    transition: transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .orbit-spill {
+    transition: margin 450ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .orbit-branches {
+    @apply pointer-events-none absolute inset-0 size-full overflow-visible;
+  }
+
+  .orbit-branches line {
+    stroke: var(--color-swan);
+    stroke-width: 2px;
+    stroke-dasharray: 6 6;
+    vector-effect: non-scaling-stroke;
+    animation: orbit-fade 300ms ease-out both;
+  }
+
+  .orbit-child,
+  .orbit-empty {
+    animation: orbit-branch 380ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  }
+
+  .orbit-child .subject-node {
+    --level-w: 4.75rem;
+    --level-h: 4.25rem;
+    --ring-size: 6.5rem;
+    --ring-width: 5px;
+    --ledge: 6px;
+  }
+
+  .orbit-open .level-ring {
+    --ring-track: var(--level);
+  }
+
+  /* An open folder is toggled "in": the face sinks below ground level, so the
+     dark wall shows above it (a hole) instead of the ledge below it. */
+  .orbit-open .level-button,
+  .orbit-open .level:hover .level-button,
+  .orbit-open .level:active .level-button {
+    transform: translateY(var(--ledge));
+  }
+
+  .orbit-open .level-ledge,
+  .orbit-open .level:hover .level-ledge,
+  .orbit-open .level:active .level-ledge {
+    top: calc(-1 * var(--ledge));
+    height: calc(var(--half) + var(--ledge));
+    border-radius: 50% 50% 0 0 / var(--half) var(--half) 0 0;
+  }
+
+  .orbit-empty {
+    @apply absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-swan bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-wide whitespace-nowrap text-wolf;
+  }
+
+  @keyframes orbit-branch {
+    from { left: var(--from-x); top: var(--from-y); scale: 0.3; opacity: 0; }
+  }
+
+  @keyframes orbit-fade {
+    from { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orbit-world, .orbit-spill { transition: none; }
+    .orbit-child, .orbit-empty, .orbit-branches line { animation: none; }
+  }
+
   .orbit-speck {
     @apply pointer-events-none absolute size-2 rounded-full bg-bee/60;
   }
 
   @media (max-width: 639px) {
-    .subject-orbit-stage { --orbit-r: 39%; }
     .subject-orbit-center { width: 9rem; }
     .subject-node { --level-w: 4.75rem; --level-h: 4.25rem; --ring-size: 6.5rem; --ring-width: 5px; --ledge: 6px; }
     .subject-node-label { font-size: 0.875rem; }
@@ -470,6 +622,14 @@
 
   .color-option-selected {
     @apply ring-3 ring-ink;
+  }
+
+  .icon-choice {
+    @apply grid h-11 min-w-11 cursor-pointer place-items-center rounded-xl border-2 border-swan bg-white px-2 text-sm font-extrabold text-wolf transition hover:bg-eel;
+  }
+
+  .icon-choice-selected {
+    @apply border-eel-blue bg-eel text-ink;
   }
 
   .color-green { background: #58cc02; }
@@ -726,3 +886,4 @@
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
 }
+

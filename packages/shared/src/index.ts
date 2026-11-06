@@ -83,6 +83,18 @@ export interface Settings {
 export const SUBJECT_COLORS = ["green", "blue", "purple", "orange", "red"] as const;
 export type SubjectColor = (typeof SUBJECT_COLORS)[number];
 
+// Names of the icons a subject can wear; the web app maps each to a glyph.
+export const SUBJECT_ICONS = ["atom", "world", "math", "flask", "code", "palette", "book", "music", "language", "heart", "rocket", "bulb"] as const;
+export type SubjectIcon = (typeof SUBJECT_ICONS)[number];
+
+export function isSubjectIcon(value: unknown): value is SubjectIcon {
+  return typeof value === "string" && (SUBJECT_ICONS as readonly string[]).includes(value);
+}
+
+// Trashed subjects and folders are deleted for good this many days later.
+// Nobody (user or agent) can empty the trash earlier.
+export const TRASH_RETENTION_DAYS = 30;
+
 export interface Subject {
   id: string;
   name: string;
@@ -90,10 +102,67 @@ export interface Subject {
   color: SubjectColor;
   gradientStart: string;
   gradientEnd: string;
+  // null means the app picks a default icon from the subject's id.
+  icon: SubjectIcon | null;
+  // The folder holding this subject; null means the top level of the library.
+  folderId: string | null;
+  position: number;
+  archivedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
   unitCount: number;
   skillCount: number;
+}
+
+export interface Folder {
+  id: string;
+  parentId: string | null;
+  name: string;
+  // Hex like "#7c5cff".
+  color: string;
+  position: number;
+  archivedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Every folder and subject the user still has, in any state. Siblings (the
+// folders and subjects sharing a parent) are ordered by `position` together.
+export interface Library {
+  folders: Folder[];
+  subjects: Subject[];
+}
+
+export type ItemKind = "subject" | "folder";
+export type ItemState = "active" | "archived" | "trashed";
+
+// An item is trashed or archived when it, or any folder above it, is. Trash wins.
+// Keyed by id (ids are unique across folders and subjects).
+export function libraryStates(library: Library): Map<string, ItemState> {
+  const folders = new Map(library.folders.map((folder) => [folder.id, folder]));
+  const own = (item: { archivedAt: string | null; deletedAt: string | null }): ItemState => (item.deletedAt ? "trashed" : item.archivedAt ? "archived" : "active");
+  const rank: Record<ItemState, number> = { active: 0, archived: 1, trashed: 2 };
+  const stateOf = (item: { archivedAt: string | null; deletedAt: string | null }, parentId: string | null): ItemState => {
+    let state = own(item);
+    for (let depth = 0, id = parentId; id && depth < 64; depth += 1) {
+      const folder = folders.get(id);
+      if (!folder) break;
+      if (rank[own(folder)] > rank[state]) state = own(folder);
+      id = folder.parentId;
+    }
+    return state;
+  };
+  const states = new Map<string, ItemState>();
+  for (const folder of library.folders) states.set(folder.id, stateOf(folder, folder.parentId));
+  for (const subject of library.subjects) states.set(subject.id, stateOf(subject, subject.folderId));
+  return states;
+}
+
+// When a trashed item is purged: its deletedAt plus TRASH_RETENTION_DAYS.
+export function purgeDate(deletedAt: string): string {
+  return new Date(new Date(deletedAt).getTime() + TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 }
 
 export interface Unit {
@@ -200,7 +269,23 @@ export interface ExportSubject {
   color: SubjectColor;
   gradientStart: string;
   gradientEnd: string;
+  icon?: SubjectIcon | null;
+  // Library placement, only in full backups (a shared subject lands at the
+  // viewer's top level). `folder` indexes ExportFile.folders.
+  folder?: number | null;
+  position?: number;
+  archivedAt?: string | null;
   units: Array<{ title: string; description: string; skills: ExportSkill[] }>;
+}
+
+// A folder in a full backup. `parent` indexes ExportFile.folders and always
+// points at an earlier entry, so parents are created before their children.
+export interface ExportFolder {
+  name: string;
+  color: string;
+  parent: number | null;
+  position: number;
+  archivedAt: string | null;
 }
 
 // Backup / share format. Import also accepts a bare `{ subject, units }`
@@ -209,6 +294,8 @@ export interface ExportFile {
   format: "halolesson";
   formatVersion: 1;
   exportedAt: string;
+  // Missing in files made before folders existed.
+  folders?: ExportFolder[];
   subjects: ExportSubject[];
 }
 

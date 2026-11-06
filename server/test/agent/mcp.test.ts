@@ -51,4 +51,18 @@ describe("MCP endpoint", () => {
     const badKind = await callTool(secret, "halo_delete", { kind: "planet", id: "x" });
     expect(badKind).toMatchObject({ isError: true, data: { code: "UNKNOWN_OP" } });
   });
+
+  test("library tools organise, trash and restore, but never delete for good", async () => {
+    const { secret } = createAgentToken(makeUser().id, "mcp");
+    const names = ((await (await rpc(secret, "tools/list")).json()) as { result: { tools: Array<{ name: string }> } }).result.tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["halo_put_folder", "halo_move", "halo_archive", "halo_trash", "halo_restore"]));
+    const folder = (await callTool(secret, "halo_put_folder", { folder: { name: "Languages" } })).data.result.id as string;
+    const subject = (await callTool(secret, "halo_put_subject", { subject: { name: "French", folderId: folder, icon: "language" } })).data.result.id as string;
+    await callTool(secret, "halo_trash", { kind: "subject", id: subject });
+    const library = (await callTool(secret, "halo_get_library")).data as any;
+    expect(library.subjects[0]).toMatchObject({ id: subject, folderId: folder, icon: "language", state: "trashed" });
+    await callTool(secret, "halo_restore", { kind: "subject", id: subject });
+    expect(((await callTool(secret, "halo_get_library")).data as any).subjects[0].state).toBe("active");
+    expect((await callTool(secret, "halo_archive", { kind: "planet", id: subject })).isError).toBe(true);
+  });
 });

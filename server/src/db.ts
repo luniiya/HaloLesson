@@ -174,3 +174,29 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 `);
+
+// Library organisation: nested folders, a shared position space for the
+// folders and subjects under one parent, archive and trash flags. Trashed rows
+// are purged TRASH_RETENTION_DAYS after deleted_at (see library.ts).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS folders (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    parent_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#7c5cff',
+    position INTEGER NOT NULL DEFAULT 0,
+    archived_at TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_folders_user ON folders(user_id, parent_id);
+`);
+const librarySubjectColumns = columnsOf("subjects");
+if (!librarySubjectColumns.includes("folder_id")) db.exec("ALTER TABLE subjects ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE");
+if (!librarySubjectColumns.includes("position")) db.exec("ALTER TABLE subjects ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+if (!librarySubjectColumns.includes("icon")) db.exec("ALTER TABLE subjects ADD COLUMN icon TEXT");
+if (!librarySubjectColumns.includes("archived_at")) db.exec("ALTER TABLE subjects ADD COLUMN archived_at TEXT");
+if (!librarySubjectColumns.includes("deleted_at")) db.exec("ALTER TABLE subjects ADD COLUMN deleted_at TEXT");
+db.exec("CREATE INDEX IF NOT EXISTS idx_subjects_folder ON subjects(user_id, folder_id)");

@@ -3,7 +3,7 @@ import { SUBJECT_COLORS, type Subject, type SubjectColor } from "@halolesson/sha
 import { api } from "$lib/api";
 import Button from "./Button";
 
-const defaultGradients: Record<SubjectColor, [string, string]> = {
+export const defaultGradients: Record<SubjectColor, [string, string]> = {
   green: ["#58cc02", "#1cb0f6"],
   blue: ["#1cb0f6", "#ce82ff"],
   purple: ["#ce82ff", "#ff4b4b"],
@@ -12,11 +12,13 @@ const defaultGradients: Record<SubjectColor, [string, string]> = {
 };
 
 interface Props {
+  // Creates the subject inside this folder; omit for the top level.
+  folderId?: string | null;
   onCreated: (subject: Subject) => void;
   onCancel: () => void;
 }
 
-export default function CreateSubjectForm({ onCreated, onCancel }: Props) {
+export default function CreateSubjectForm({ folderId = null, onCreated, onCancel }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<SubjectColor>("green");
@@ -38,7 +40,7 @@ export default function CreateSubjectForm({ onCreated, onCancel }: Props) {
     try {
       onCreated(await api<Subject>("/api/subjects", {
         method: "POST",
-        body: JSON.stringify({ name, description, color, gradientStart, gradientEnd }),
+        body: JSON.stringify({ name, description, color, gradientStart, gradientEnd, folderId }),
       }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create subject");

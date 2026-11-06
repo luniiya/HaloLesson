@@ -1,4 +1,4 @@
-import { APP_VERSION, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type Settings, type SubjectColor, type User } from "@halolesson/shared";
+import { APP_VERSION, isSubjectIcon, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type User } from "@halolesson/shared";
 import { resolve, sep } from "node:path";
 import {
   adminCreateUser,
@@ -29,7 +29,8 @@ import { eventStream, libraryChanged } from "./events";
 import { getPracticeSession, submitAttempt } from "./practice";
 import { getSettings, updateSettings } from "./settings";
 import { copySharedSubject, createShareLink, getShareLink, getSharedSubject, revokeShareLink } from "./shares";
-import { createSubject, getSubject, listSubjects } from "./subjects";
+import { createFolder, getLibrary, moveItem, purgeTrash, restoreItem, setArchived, trashItem, updateFolder } from "./library";
+import { createSubject, getSubject, listSubjects, updateSubject } from "./subjects";
 
 const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
@@ -68,6 +69,32 @@ function stringField(value: unknown): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function itemKind(value: unknown): ItemKind {
+  if (value === "subject" || value === "folder") return value;
+  throw new Error("kind must be subject or folder");
+}
+
+function optionalId(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function optionalColor(value: unknown): SubjectColor | undefined {
+  return SUBJECT_COLORS.includes(value as SubjectColor) ? (value as SubjectColor) : undefined;
+}
+
+// A write to the library structure (folders, order, archive, trash): run it,
+// then tell every open tab and agent that the whole library changed.
+async function libraryWrite(req: Request, run: (userId: string, input: Record<string, unknown>) => unknown, status = 200) {
+  try {
+    const user = requireUser(req);
+    const result = run(user.id, await body(req));
+    libraryChanged(user.id, null);
+    return Response.json(result ?? { ok: true }, { status });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 function downloadName(name: string): string {
@@ -240,7 +267,8 @@ const server = Bun.serve({
           if (Number(req.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
           const raw = await req.text();
           if (raw.length > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
-          const result = importSubjects(user.id, parseImport(JSON.parse(raw)));
+          const { folders, subjects } = parseImport(JSON.parse(raw));
+          const result = importSubjects(user.id, subjects, folders);
           libraryChanged(user.id, null);
           return Response.json(result, { status: 201 });
         } catch (error) {
@@ -380,6 +408,7 @@ const server = Bun.serve({
             color,
             stringField(input.gradientStart) || "#58cc02",
             stringField(input.gradientEnd) || "#1cb0f6",
+            { icon: isSubjectIcon(input.icon) ? input.icon : null, folderId: optionalId(input.folderId) },
           );
           libraryChanged(user.id, subject.id);
           return Response.json(subject, { status: 201 });
@@ -396,6 +425,49 @@ const server = Bun.serve({
           return errorResponse(error);
         }
       },
+      PATCH: (req) =>
+        libraryWrite(req, (userId, input) =>
+          updateSubject(userId, req.params.id, {
+            name: optionalString(input.name),
+            description: optionalString(input.description),
+            color: optionalColor(input.color),
+            gradientStart: optionalString(input.gradientStart),
+            gradientEnd: optionalString(input.gradientEnd),
+            icon: input.icon === null ? null : isSubjectIcon(input.icon) ? input.icon : undefined,
+          }),
+        ),
+    },
+    "/api/library": {
+      GET: (req) => {
+        try {
+          return Response.json(getLibrary(requireUser(req).id));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/folders": {
+      POST: (req) => libraryWrite(req, (userId, input) => createFolder(userId, stringField(input.name), optionalString(input.color), optionalId(input.parentId)), 201),
+    },
+    "/api/folders/:id": {
+      PATCH: (req) => libraryWrite(req, (userId, input) => updateFolder(userId, req.params.id, { name: optionalString(input.name), color: optionalString(input.color) })),
+    },
+    "/api/library/move": {
+      POST: (req) =>
+        libraryWrite(req, (userId, input) =>
+          moveItem(userId, itemKind(input.kind), stringField(input.id), optionalId(input.parentId), typeof input.index === "number" ? input.index : undefined),
+        ),
+    },
+    "/api/library/archive": {
+      POST: (req) => libraryWrite(req, (userId, input) => setArchived(userId, itemKind(input.kind), stringField(input.id), input.archived !== false)),
+    },
+    // Trash and restore only: nothing here (or anywhere) deletes permanently.
+    // The 30-day purge below is the only way trashed items are ever removed.
+    "/api/library/trash": {
+      POST: (req) => libraryWrite(req, (userId, input) => trashItem(userId, itemKind(input.kind), stringField(input.id))),
+    },
+    "/api/library/restore": {
+      POST: (req) => libraryWrite(req, (userId, input) => restoreItem(userId, itemKind(input.kind), stringField(input.id))),
     },
     "/api/subjects/:id/export": (req) => {
       try {
@@ -481,5 +553,8 @@ const server = Bun.serve({
     return new Response("Web app not built. Run bun run build or use the Vite dev server.", { status: 503 });
   },
 });
+
+purgeTrash();
+setInterval(() => purgeTrash(), 60 * 60 * 1000).unref();
 
 console.log(`haloLesson server listening on http://localhost:${server.port}`);

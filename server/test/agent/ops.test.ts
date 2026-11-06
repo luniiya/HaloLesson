@@ -127,8 +127,17 @@ describe("units and skills", () => {
     put(user.id, { op: "putSkill", skill: { unitId, title: "S", exercises: [mc("one")] } });
     put(user.id, { op: "deleteUnit", id: unitId });
     expect(readSubject(user.id, subjectId).units).toHaveLength(0);
-    put(user.id, { op: "deleteSubject", id: subjectId });
-    expect(readLibrary(user.id).subjects).toHaveLength(0);
+  });
+
+  test("deleting a subject only moves it to the trash", () => {
+    const { user, subjectId } = scaffold();
+    expect(put(user.id, { op: "deleteSubject", id: subjectId }).result).toEqual({ deleted: subjectId, trashed: true });
+    const [trashed] = readLibrary(user.id).subjects;
+    expect(trashed).toMatchObject({ id: subjectId, state: "trashed" });
+    expect(trashed!.purgesAt).toBeString();
+    expectAgentError(() => readSubject(user.id, subjectId), 404, "NOT_FOUND");
+    put(user.id, { op: "restoreItem", kind: "subject", id: subjectId });
+    expect(readSubject(user.id, subjectId).units).toHaveLength(1);
   });
 });
 
@@ -140,6 +149,8 @@ describe("isolation between accounts", () => {
     expectAgentError(() => put(intruder.id, { op: "putUnit", unit: { subjectId: owner.subjectId, title: "x" } }), 404, "NOT_FOUND");
     expectAgentError(() => put(intruder.id, { op: "putSkill", skill: { unitId: owner.unitId, title: "x" } }), 404, "NOT_FOUND");
     expectAgentError(() => put(intruder.id, { op: "deleteSubject", id: owner.subjectId }), 404, "NOT_FOUND");
+    expectAgentError(() => put(intruder.id, { op: "trashItem", kind: "subject", id: owner.subjectId }), 404, "NOT_FOUND");
+    expectAgentError(() => put(intruder.id, { op: "moveItem", kind: "subject", id: owner.subjectId, parentId: null }), 404, "NOT_FOUND");
     expect(readLibrary(intruder.id).subjects).toHaveLength(0);
   });
 });
@@ -197,5 +208,39 @@ describe("readProgress", () => {
     expect(progress.skills[0]).toMatchObject({ skillTitle: "S", correctAttempts: 1, totalAttempts: 3 });
     expect(progress.recentMistakes.map((mistake) => [mistake.answerGiven, mistake.correctAnswer]).sort()).toEqual([["a", "b"], ["y", "x"]]);
     expectAgentError(() => readProgress(makeUser().id, subjectId), 404, "NOT_FOUND");
+  });
+});
+
+describe("library organisation", () => {
+  test("folders nest, hold subjects and keep a shared order", () => {
+    const user = makeUser();
+    const outer = put(user.id, { op: "putFolder", folder: { name: "School", color: "#12b5a5" } }).result.id as string;
+    const inner = put(user.id, { op: "putFolder", folder: { name: "Maths", parentId: outer } }).result.id as string;
+    const a = put(user.id, { op: "putSubject", subject: { name: "A", folderId: inner, icon: "rocket" } }).result.id as string;
+    const b = put(user.id, { op: "putSubject", subject: { name: "B", folderId: inner, position: 0 } }).result.id as string;
+    const library = readLibrary(user.id);
+    expect(library.folders.find((folder) => folder.id === inner)).toMatchObject({ parentId: outer, state: "active" });
+    expect(library.subjects.find((subject) => subject.id === a)).toMatchObject({ folderId: inner, icon: "rocket", position: 1 });
+    expect(library.subjects.find((subject) => subject.id === b)).toMatchObject({ folderId: inner, position: 0 });
+    put(user.id, { op: "moveItem", kind: "subject", id: a, parentId: null });
+    expect(readLibrary(user.id).subjects.find((subject) => subject.id === a)!.folderId).toBeNull();
+    expectAgentError(() => put(user.id, { op: "moveItem", kind: "folder", id: outer, parentId: inner }), 400, "INVALID");
+    expectAgentError(() => put(user.id, { op: "putSubject", subject: { name: "C", icon: "nope" } }), 400, "INVALID");
+    expectAgentError(() => put(user.id, { op: "putSubject", subject: { name: "C", folderId: "missing" } }), 404, "NOT_FOUND");
+  });
+
+  test("archive and trash are inherited by what is inside a folder", () => {
+    const user = makeUser();
+    const folder = put(user.id, { op: "putFolder", folder: { name: "F" } }).result.id as string;
+    const subject = put(user.id, { op: "putSubject", subject: { name: "S", folderId: folder } }).result.id as string;
+    const stateOf = () => readLibrary(user.id).subjects.find((item) => item.id === subject)!.state;
+    put(user.id, { op: "archiveItem", kind: "folder", id: folder });
+    expect(stateOf()).toBe("archived");
+    put(user.id, { op: "trashItem", kind: "folder", id: folder });
+    expect(stateOf()).toBe("trashed");
+    put(user.id, { op: "restoreItem", kind: "folder", id: folder });
+    expect(stateOf()).toBe("archived");
+    put(user.id, { op: "archiveItem", kind: "folder", id: folder, archived: false });
+    expect(stateOf()).toBe("active");
   });
 });

@@ -7,6 +7,7 @@ import AppLayout from "./components/AppLayout";
 import AuthPage from "./routes/AuthPage";
 import PracticePage from "./routes/PracticePage";
 import SharedPage from "./routes/SharedPage";
+import ShelfPage from "./routes/ShelfPage";
 import SubjectPage from "./routes/SubjectPage";
 import SubjectsPage from "./routes/SubjectsPage";
 import AccountSettings from "./routes/settings/AccountSettings";
@@ -30,6 +31,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/setup" element={<AuthPage />} />
           <Route element={<AppLayout />}>
             <Route index element={<SubjectsPage />} />
+            <Route path="/archive" element={<ShelfPage key="archive" view="archived" />} />
+            <Route path="/trash" element={<ShelfPage key="trash" view="trashed" />} />
             <Route path="/subjects/:subjectId" element={<SubjectPage />} />
             <Route path="/shared/:token" element={<SharedPage />} />
             <Route path="/skills/:skillId/practice" element={<PracticePage />} />

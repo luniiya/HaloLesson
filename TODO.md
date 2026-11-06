@@ -43,6 +43,21 @@
 - [ ] Add reduced-motion support and keyboard accessibility
 - [ ] Run the final build, type checks, and end-to-end user flow after UI changes
 
+## Library management (main page)
+
+Every item below needs BOTH the web UI and the agent interface (REST commit ops + MCP + prompt), per the parity rule.
+
+- [x] Edit button on the main page, top right next to "New subject": turns on edit mode
+- [x] Edit mode: rename subjects, change their colors, reorganise them (drag / move up and down)
+- [x] Folders: create, rename, recolor, reorder, and move subjects in and out; folders can contain folders (nested)
+- [x] Change a subject's icon (pick from a set) in edit mode
+- [x] Archive: hide a subject (and folders) from the main page, view the archive, unarchive
+- [x] Trash: "delete" only moves to the trash; trash can be viewed and restored
+- [x] Trash auto-purge: items are permanently deleted automatically 30 days after trashing; users and agents can never permanently delete by hand
+- [x] Agent ops + MCP tools + prompt for all of the above (rename, recolor, reorder, folders, archive, trash, restore)
+- [x] Tests in `server/test/subjects` (and `agent`) covering archive, trash, restore, 30-day purge, folders and ordering
+- [x] Removed the Log out button from the left sidebar (still in Settings > Account)
+
 ## After UI
 
 - [x] Clarify the dingcad-inspired agent generation flow

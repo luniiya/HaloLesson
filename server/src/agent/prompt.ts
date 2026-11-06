@@ -1,3 +1,5 @@
+import { SUBJECT_ICONS } from "@halolesson/shared";
+
 // The copy-paste prompt that connects an agent to one account, and the plain
 // text API reference it points to. Both are built from the origin the user's
 // browser used, so the URLs work from wherever the agent runs.
@@ -51,6 +53,7 @@ If this project has an AGENTS.md or CLAUDE.md (or your equivalent), add a short 
 }
 
 export function buildAgentSpec(origin: string): string {
+  const ICONS = SUBJECT_ICONS.join("|");
   return `haloLesson agent API (protocol 1)
 =================================
 
@@ -60,18 +63,23 @@ MCP: the same operations are MCP tools at ${origin}/mcp (Streamable HTTP, same h
 
 Model
 -----
-subject { id, name (max 80), description (max 500), color: green|blue|purple|orange|red, gradientStart, gradientEnd (hex like #58cc02) }
+folder { id, parentId (null: top level), name (max 80), color (hex like #7c5cff), position }   folders nest inside folders (max 200 folders)
+subject { id, name (max 80), description (max 500), color: green|blue|purple|orange|red, gradientStart, gradientEnd (hex like #58cc02),
+          icon: ${ICONS}|null, folderId (null: top level), position }
+position is the 0-based order among the folders and subjects under the same parent.
   unit { id, subjectId, title (max 120), description (max 500), position }
     skill { id, unitId, title (max 120), description (max 500), position, exercises[] }
       exercise, multiple choice: { id, type: "multiple_choice", prompt (max 2000), options: string[] (2+, each max 500), correctIndex, explanation (max 2000) }
       exercise, free text:       { id, type: "free_text", prompt (max 2000), answers: string[] (1+, each max 500), explanation (max 2000) }
 The server assigns every id. Free-text answers match ignoring case and repeated spaces.
 explanation is optional to the server, but always write one: it's what the learner sees after answering.
-Limits: 500 subjects, 100 units per subject, 100 skills per unit, 50 exercises per skill.
+Limits: 500 subjects, 200 folders, 100 units per subject, 100 skills per unit, 50 exercises per skill.
 
 Reads
 -----
-GET /api/agent/library               -> { revision, subjects: [{ id, name, description, unitCount, skillCount, updatedAt }] } (most recently updated first)
+GET /api/agent/library               -> { revision, folders: [{ id, parentId, name, color, position, state, deletedAt?, purgesAt? }],
+                                          subjects: [{ id, name, description, icon, folderId, position, state, unitCount, skillCount, updatedAt, deletedAt?, purgesAt? }] }
+                                        state is active | archived | trashed (inherited from folders above). Trashed items are listed until purgesAt.
 GET /api/agent/subjects/:id          -> { revision, subject, units: [{ id, title, description, skills: [{ id, title, description, stars, mastery, exercises }] }] }
 GET /api/agent/progress[?subjectId=] -> { revision, skills: [{ skillId, skillTitle, subjectId, subjectName, stars, mastery, correctAttempts, totalAttempts, lastPracticedAt }],
                                           recentMistakes: [{ exerciseId, skillId, prompt, answerGiven, correctAnswer, at }] }
@@ -88,6 +96,10 @@ Exactly one command per request. Commands:
   { "op": "putSubject", "subject": { id?, name, description?, color?, gradientStart?, gradientEnd? } }      result { id }
   { "op": "putUnit",    "unit":    { id?, subjectId, title, description?, position? } }                     result { id }
   { "op": "putSkill",   "skill":   { id?, unitId, title, description?, position?, exercises? } }            result { id, exerciseIds }
+  { "op": "putFolder", "folder": { id?, name, color?, parentId?, position? } }                              result { id }
+  { "op": "moveItem", "kind": "subject" | "folder", "id": "<id>", "parentId": "<folder id>" | null, "position"?: n }   result { id, kind }
+  { "op": "archiveItem", "kind": "subject" | "folder", "id": "<id>", "archived"?: true | false }           result { id, kind }
+  { "op": "trashItem" | "restoreItem", "kind": "subject" | "folder", "id": "<id>" }                       result { id, kind }
   { "op": "deleteSubject" | "deleteUnit" | "deleteSkill", "id": "<id>" }                                   result { deleted }
 
 - Without id, put creates a record. With id, it updates that record; fields you leave out keep their current value.
@@ -95,7 +107,11 @@ Exactly one command per request. Commands:
   Passing a different subjectId/unitId moves the record.
 - skill.exercises, when given, is the skill's complete list in order. Items with an existing exercise id are updated (the learner keeps their history),
   items without id are created, and existing exercises you leave out are deleted. Omit exercises to keep them untouched.
-- Deleting cascades: a subject takes its units, skills, exercises and the learner's progress with it. Only delete when asked.
+- putSubject also takes icon, folderId (move into a folder; null for the top level) and position. putFolder with parentId nests a folder in another.
+- Archive hides a subject or folder (and what is inside it) from the main page without deleting anything; archiveItem with archived:false brings it back.
+- Trash: trashItem and deleteSubject only move a subject or folder (with its contents) to the trash. The server deletes it for good 30 days later
+  (purgesAt in the library), and restoreItem brings it back before then. There is no permanent delete for anyone. Only trash when asked.
+- deleteUnit and deleteSkill are immediate and cascade: a unit takes its skills, exercises and the learner's progress with it. Only delete when asked.
 
 Reliability
 -----------
