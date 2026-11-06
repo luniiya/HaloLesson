@@ -17,14 +17,14 @@ ${goal}
 
 Use MCP if you can (Streamable HTTP): ${mcpUrl}
 Send the header \`Authorization: Bearer ${secret}\`.
-- Claude Code: \`claude mcp add --transport http halolesson ${mcpUrl} --header "Authorization: Bearer ${secret}"\`
+- Claude Code: \`claude mcp add --scope user --transport http halolesson ${mcpUrl} --header "Authorization: Bearer ${secret}"\`
 - Other clients (.mcp.json, Cursor, ...):
   \`\`\`json
   { "mcpServers": { "halolesson": { "type": "http", "url": "${mcpUrl}", "headers": { "Authorization": "Bearer ${secret}" } } } }
   \`\`\`
 If the halolesson tools need a restart to appear, don't wait: use the HTTP API right away. GET ${origin}/api/agent/spec (plain text, no token needed) documents it. It has the same operations as the MCP tools and takes the same header.
 
-Keep this token private. It gives full access to my lessons and doesn't expire; I can revoke it in Settings > Sessions. Never write it into a file that gets committed. On HTTP 401, ask me to copy a new prompt.
+Keep this token private. It gives full access to my lessons and doesn't expire; I can revoke it in Settings > Sessions. On HTTP 401, ask me to copy a new prompt.
 
 ## Build well
 
@@ -35,9 +35,18 @@ Keep this token private. It gives full access to my lessons and doesn't expire; 
 - When I ask for review, read my progress and recent mistakes and target my weak skills.
 - Finish with a short summary of what you made and the link ${origin}/subjects/<subjectId>.
 
+## Save the token
+
+This prompt is the only time you see the token, so save it now, before building anything, where your future sessions can read it but nobody else can:
+- Claude Code: the \`claude mcp add --scope user\` command above already stores it privately in ~/.claude.json, available from every project.
+- Other MCP clients: put the config in your user-level MCP settings. If it has to go in a project's .mcp.json, make sure that file is gitignored.
+- HTTP only: write it to ~/.config/halolesson/token (create the folder, \`chmod 600\` the file) and read it from there.
+Never write the token into a file that gets committed, and never paste it back into chat.
+If you can't save it anywhere, tell me, and I'll copy you a new prompt next session.
+
 ## Remember this
 
-If this project has an AGENTS.md or CLAUDE.md (or your equivalent), add a short section saying haloLesson is available over MCP at ${mcpUrl}, so future sessions reuse the connection. Do not put the token in that file.
+If this project has an AGENTS.md or CLAUDE.md (or your equivalent), add a short section saying haloLesson is available over MCP at ${mcpUrl} (API docs: ${origin}/api/agent/spec) and where you saved the token, so future sessions reconnect without a new prompt. Write the location, not the token itself.
 `;
 }
 
@@ -54,14 +63,15 @@ Model
 subject { id, name (max 80), description (max 500), color: green|blue|purple|orange|red, gradientStart, gradientEnd (hex like #58cc02) }
   unit { id, subjectId, title (max 120), description (max 500), position }
     skill { id, unitId, title (max 120), description (max 500), position, exercises[] }
-      exercise, multiple choice: { id, type: "multiple_choice", prompt (max 2000), options: string[] (2+), correctIndex, explanation }
-      exercise, free text:       { id, type: "free_text", prompt, answers: string[] (1+ accepted answers), explanation }
+      exercise, multiple choice: { id, type: "multiple_choice", prompt (max 2000), options: string[] (2+, each max 500), correctIndex, explanation (max 2000) }
+      exercise, free text:       { id, type: "free_text", prompt (max 2000), answers: string[] (1+, each max 500), explanation (max 2000) }
 The server assigns every id. Free-text answers match ignoring case and repeated spaces.
+explanation is optional to the server, but always write one: it's what the learner sees after answering.
 Limits: 500 subjects, 100 units per subject, 100 skills per unit, 50 exercises per skill.
 
 Reads
 -----
-GET /api/agent/library               -> { revision, subjects: [{ id, name, description, unitCount, skillCount, updatedAt }] }
+GET /api/agent/library               -> { revision, subjects: [{ id, name, description, unitCount, skillCount, updatedAt }] } (most recently updated first)
 GET /api/agent/subjects/:id          -> { revision, subject, units: [{ id, title, description, skills: [{ id, title, description, stars, mastery, exercises }] }] }
 GET /api/agent/progress[?subjectId=] -> { revision, skills: [{ skillId, skillTitle, subjectId, subjectName, stars, mastery, correctAttempts, totalAttempts, lastPracticedAt }],
                                           recentMistakes: [{ exerciseId, skillId, prompt, answerGiven, correctAnswer, at }] }
@@ -71,6 +81,7 @@ Writes
 ------
 POST /api/agent/commits
   { "requestId": "<new UUID>", "expectedRevision": <number, optional>, "command": <one command> }
+  requestId is optional but recommended: any 8-100 letters, digits, - or _. A UUID is easiest.
 -> { revision, op, result }
 
 Exactly one command per request. Commands:
@@ -80,7 +91,8 @@ Exactly one command per request. Commands:
   { "op": "deleteSubject" | "deleteUnit" | "deleteSkill", "id": "<id>" }                                   result { deleted }
 
 - Without id, put creates a record. With id, it updates that record; fields you leave out keep their current value.
-- position is a 0-based index among siblings. New records go last unless you give one. Passing a different subjectId/unitId moves the record.
+- position is a 0-based index among siblings. New records go last unless you give one; a position past the end also means last.
+  Passing a different subjectId/unitId moves the record.
 - skill.exercises, when given, is the skill's complete list in order. Items with an existing exercise id are updated (the learner keeps their history),
   items without id are created, and existing exercises you leave out are deleted. Omit exercises to keep them untouched.
 - Deleting cascades: a subject takes its units, skills, exercises and the learner's progress with it. Only delete when asked.
@@ -88,9 +100,11 @@ Exactly one command per request. Commands:
 Reliability
 -----------
 - requestId: send a fresh UUID per command. If a request times out or you aren't sure it landed, resend the exact same body with the same requestId.
-  You'll get the original response (with "replayed": true) instead of a duplicate. Reusing a requestId for a different command returns 409 REQUEST_ID_REUSED.
+  You'll get the original response (with "replayed": true) instead of a duplicate. Its revision is from that original commit, so reread
+  before chaining expectedRevision from it. Reusing a requestId for a different body (even just expectedRevision) returns 409 REQUEST_ID_REUSED.
 - expectedRevision: pass the revision from your last read or commit to make sure nobody else (like the user in the browser) changed the library.
-  A mismatch returns 409 REVISION_CONFLICT with the current revision. Reread, reconcile, and retry with a new requestId. Omit it to skip the check.
+  A mismatch returns 409 REVISION_CONFLICT with the current revision. That's routine when the user edits in the browser while you work:
+  reread, reconcile, and retry with a new requestId. Omit it to skip the check, which is fine for a fresh build nobody else is editing.
 - Errors are JSON { error, code }. 400 INVALID / LIMIT / UNKNOWN_OP: fix the command. 401: the token was revoked, ask the user for a new prompt.
   404 NOT_FOUND: wrong id. 429: back off for a minute (limit 300 requests per minute).
 

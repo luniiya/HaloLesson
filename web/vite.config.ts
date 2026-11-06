@@ -11,7 +11,11 @@ export default defineConfig({
   server: {
     port: 7270,
     host: true,
-    // /mcp too: agent prompts point at the origin the browser is using.
-    proxy: { "/api": "http://localhost:7246", "/mcp": "http://localhost:7246" },
+    // /mcp too: agent prompts point at the origin the browser is using. Keep
+    // the Host header so the API builds agent URLs on this port, not 7246.
+    proxy: {
+      "/api": { target: "http://localhost:7246", changeOrigin: false },
+      "/mcp": { target: "http://localhost:7246", changeOrigin: false },
+    },
   },
 });

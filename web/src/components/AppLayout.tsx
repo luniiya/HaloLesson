@@ -37,7 +37,7 @@ export default function AppLayout() {
             <BookIcon />
             Learn
           </NavLink>
-          <button type="button" className="nav-item text-left" onClick={() => setAgentOpen(true)}><SparkIcon />Create with AI</button>
+          <button type="button" className="nav-item text-left" onClick={() => setAgentOpen(true)}><SparkIcon />Connect agent</button>
           <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}>
             <IconSettings className="size-6" aria-hidden="true" />
             Settings

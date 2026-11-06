@@ -204,8 +204,8 @@ function parseSubject(value: unknown, where: string, fallbackName = ""): ExportS
   };
 }
 
-// Accepts a haloLesson export file, or the bare `{ subject, units }` JSON the
-// Create with AI prompt asks for. Everything is validated before anything is
+// Accepts a haloLesson export file, or a bare `{ subject, units }` object for
+// one subject. Everything is validated before anything is
 // written, and imports always create new subjects instead of overwriting.
 export function parseImport(value: unknown): ExportSubject[] {
   const input = record(value, "File");

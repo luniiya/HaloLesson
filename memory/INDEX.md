@@ -7,6 +7,7 @@
 - [recoral reference](halolesson/recoral-reference.md) — ../recoral = stack+auth donor: Bun monorepo, bun:sqlite, hand-rolled cookie auth, React 19/Vite/Tailwind 4
 - [Development environment](halolesson/development-environment.md) — port 7270 is open for bwl UI testing; API uses 7246
 - [Branding](halolesson/branding.md) — prefer a rotating 3D open book on a display plate with a yellow halo, not a character mascot
+- [Accent color setting](halolesson/accent-color-setting.md) — per-user --accent var, default violet #7c5cff, Settings > Appearance
 - [Subject path UI](halolesson/subject-path-ui.md) — orbital subjects, circular skill nodes, custom subject gradients, gold perfected levels
 - [Data portability](halolesson/data-portability.md) — later: export/import plus sharing individual skills and whole subjects
 - [Account system port](halolesson/account-system-port.md) — 2026-11-06: port recoral setup/account/sessions/admin/settings/import-export
@@ -24,3 +25,5 @@
 - [Duolingo agent skills](duolingo-ui/agent-skills.md) — installable Claude Code skills for Duolingo-style UI found online
 - [Duolingo UI research sources](duolingo-ui/research-sources.md) — where the tokens came from, further reading
 - [Agent connect design](halolesson/agent-connect-design.md) — dingcad-style token + commit API so agents build lessons live
+- [Dev instance settings](halolesson/dev-instance-settings.md) — complex password requirement is off on the local dev DB
+- [Share links](halolesson/share-links.md) — subject share link + preview page / export file design

@@ -1,11 +1,18 @@
 @import "tailwindcss";
 
+/* The user's accent color (set on <html> by $lib/theme); every shade derives from it. */
+:root {
+  --accent: #7c5cff;
+  --accent-shade: color-mix(in oklab, var(--accent) 90%, black);
+  --accent-dark: color-mix(in oklab, var(--accent) 70%, black);
+}
+
 @theme {
   --font-sans: "Nunito", "Avenir Next", system-ui, sans-serif;
-  --color-owl: #58cc02;
-  --color-owl-deep: #58a700;
-  --color-owl-light: #89e219;
-  --color-owl-pale: #dbf8c5;
+  --color-accent: var(--accent);
+  --color-accent-deep: color-mix(in oklab, var(--accent) 80%, black);
+  --color-accent-light: color-mix(in oklab, var(--accent) 75%, white);
+  --color-accent-pale: color-mix(in oklab, var(--accent) 22%, white);
   --color-streak: #ff9600;
   --color-gem: #ce82ff;
   --color-eel-blue: #1cb0f6;
@@ -41,17 +48,23 @@
   }
 
   ::selection {
-    background: #dbf8c5;
+    background: var(--color-accent-pale);
   }
 }
 
 @layer components {
   .button {
-    @apply inline-flex min-h-11 items-center justify-center rounded-xl px-5 py-2.5 text-sm font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl px-5 py-2.5 text-sm font-black uppercase tracking-wide transition-[color,background-color,transform,box-shadow] duration-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Stays pressed down while the click's work runs. */
+  .button-pressed {
+    @apply translate-y-1 shadow-none disabled:opacity-80;
+    animation: press-pop 0.35s ease-out;
   }
 
   .button-primary {
-    @apply bg-owl text-white shadow-[0_4px_0_#58a700] hover:bg-owl-light active:translate-y-1 active:shadow-none;
+    @apply bg-accent text-white shadow-[0_4px_0_var(--color-accent-deep)] hover:bg-accent-light active:translate-y-1 active:shadow-none;
   }
 
   .button-secondary {
@@ -82,53 +95,146 @@
     @apply w-full rounded-xl border-2 border-swan bg-white px-4 py-3 text-base font-semibold text-ink outline-none transition placeholder:font-medium placeholder:text-hare focus:border-eel-blue focus:ring-3 focus:ring-eel-blue/20;
   }
 
+  /* Square so the orbit is a true circle; nodes and the dashed ring share --orbit-r. */
   .subject-orbit-stage {
-    @apply relative mx-auto w-full max-w-3xl;
-    aspect-ratio: 1.12;
+    @apply relative mx-auto w-full max-w-2xl;
+    --orbit-r: 40%;
+    aspect-ratio: 1;
   }
 
   .subject-orbit-ring {
     @apply pointer-events-none absolute rounded-full border-2 border-dashed border-swan;
-    inset: 11% 13%;
+    inset: calc(50% - var(--orbit-r));
   }
 
   .subject-orbit-center {
     @apply absolute left-1/2 top-1/2 flex w-48 -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center;
   }
 
+  /* Only the ring is in flow, so translating by half centers the ring on the orbit. */
   .subject-node-position {
-    @apply absolute z-10 w-32 -translate-x-1/2 -translate-y-1/2;
+    @apply absolute z-10 -translate-x-1/2 -translate-y-1/2 focus-within:z-30 hover:z-30;
+    left: calc(50% + cos(var(--angle)) * var(--orbit-r));
+    top: calc(50% + sin(var(--angle)) * var(--orbit-r));
   }
 
   .subject-node {
     @apply flex flex-col items-center text-center outline-none;
   }
 
-  .subject-node-face {
-    @apply grid size-24 place-items-center rounded-full border-4 text-white transition-transform duration-200 group-hover:-translate-y-1 group-active:translate-y-1;
-    border-color: var(--subject-light);
-    background: radial-gradient(circle at 38% 28%, var(--subject-light), var(--subject) 55%);
-    box-shadow: 0 7px 0 var(--subject-dark), 0 10px 18px rgb(60 60 60 / 12%);
+  /* Duolingo-style level button, shared by subjects and skills: a ring around
+     a flat, slightly oval face sitting on a solid ledge. Hover lifts it,
+     pressing sinks it into the ledge. Set --level, --level-dark, --level-w,
+     --level-h and --ring-size on the clickable `.level` element. */
+  .level {
+    --ledge: 8px;
+    --ring-width: 6px;
   }
 
-  .subject-node-face svg {
-    @apply size-12 drop-shadow-sm;
+  .level-ring {
+    @apply relative grid shrink-0 place-items-center rounded-full;
+    width: var(--ring-size);
+    height: var(--ring-size);
+    padding-bottom: var(--ledge);
   }
 
-  .subject-node:active .subject-node-face {
-    box-shadow: 0 2px 0 var(--subject-dark);
+  /* A masked conic, so the ring doubles as a progress ring (--progress). */
+  .level-ring::before {
+    @apply pointer-events-none absolute inset-0 rounded-full;
+    content: "";
+    background: conic-gradient(var(--level) var(--progress, 0%), var(--ring-track, #e5e5e5) 0);
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-width)), #000 calc(100% - var(--ring-width) + 0.5px));
   }
 
-  .subject-node:focus-visible .subject-node-face {
-    @apply outline-3 outline-offset-4 outline-eel-blue;
+  .level:hover .level-ring {
+    --ring-track: color-mix(in srgb, var(--level) 35%, #e5e5e5);
+  }
+
+  .level:focus-visible .level-ring {
+    @apply outline-3 outline-offset-2 outline-eel-blue;
+  }
+
+  /* The ledge is its own shape (straight sides, rounded bottom) so the button
+     reads as a solid cylinder instead of two stacked ovals. */
+  .level-button {
+    @apply relative;
+    --half: calc(var(--level-h) / 2);
+    width: var(--level-w);
+    height: var(--level-h);
+    transition: transform 120ms ease, filter 120ms ease;
+  }
+
+  .level-ledge {
+    @apply absolute inset-x-0 top-1/2;
+    height: calc(var(--half) + var(--ledge));
+    border-radius: 0 0 50% 50% / 0 0 var(--half) var(--half);
+    background: var(--level-dark);
+    transition: height 120ms ease;
+  }
+
+  .level-face {
+    @apply relative grid size-full place-items-center rounded-[50%] text-white;
+    background: var(--level);
+  }
+
+  /* Glossy highlight across the top of the face. */
+  .level-face::before {
+    @apply pointer-events-none absolute rounded-[50%];
+    content: "";
+    inset: 10% 16% auto;
+    height: 26%;
+    background: rgb(255 255 255 / 22%);
+  }
+
+  .level-face svg {
+    @apply relative;
+    width: 45%;
+    height: 45%;
+    filter: drop-shadow(0 2px 0 var(--level-dark));
+  }
+
+  .level:hover .level-button {
+    filter: brightness(1.07);
+    transform: translateY(-3px);
+  }
+
+  .level:hover .level-ledge {
+    height: calc(var(--half) + var(--ledge) + 3px);
+  }
+
+  .level:active .level-button {
+    filter: none;
+    transform: translateY(var(--ledge));
+    transition-duration: 60ms;
+  }
+
+  .level:active .level-ledge {
+    height: var(--half);
+    transition-duration: 60ms;
+  }
+
+  .subject-node {
+    --level-w: 6.25rem;
+    --level-h: 5.5rem;
+    --ring-size: 8.25rem;
+  }
+
+  /* White fill hides the dashed orbit behind the ring. */
+  .subject-node .level-ring {
+    @apply bg-white;
+  }
+
+  /* Names would collide around a full orbit, so they show on hover/focus. */
+  .subject-node-tip {
+    @apply pointer-events-none absolute left-1/2 top-full mt-1 flex w-max max-w-48 -translate-x-1/2 translate-y-1 flex-col items-center rounded-xl border-2 border-swan bg-white px-3 py-2 text-center opacity-0 shadow-[0_3px_0_#e5e5e5] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100;
   }
 
   .subject-node-label {
-    @apply mt-4 max-w-full text-base font-black leading-5 text-ink transition-colors group-hover:text-[var(--subject-dark)];
+    @apply text-base font-black leading-5 text-ink;
   }
 
   .subject-node-meta {
-    @apply mt-1 text-xs font-extrabold uppercase tracking-wide text-wolf;
+    @apply mt-0.5 text-xs font-extrabold uppercase tracking-wide text-wolf;
   }
 
   .orbit-speck {
@@ -136,13 +242,10 @@
   }
 
   @media (max-width: 639px) {
-    .subject-orbit-stage { aspect-ratio: 0.92; }
-    .subject-orbit-ring { inset: 12% 7%; }
+    .subject-orbit-stage { --orbit-r: 39%; }
     .subject-orbit-center { width: 9rem; }
-    .subject-node-position { width: 7rem; }
-    .subject-node-face { width: 5rem; height: 5rem; border-width: 3px; box-shadow: 0 6px 0 var(--subject-dark); }
-    .subject-node-face svg { width: 2.25rem; height: 2.25rem; }
-    .subject-node-label { margin-top: 0.75rem; font-size: 0.875rem; }
+    .subject-node { --level-w: 4.75rem; --level-h: 4.25rem; --ring-size: 6.5rem; --ring-width: 5px; --ledge: 6px; }
+    .subject-node-label { font-size: 0.875rem; }
     .subject-node-meta { font-size: 0.625rem; }
   }
 
@@ -176,34 +279,19 @@
   }
 
   .skill-node {
-    @apply absolute left-[var(--node-x)] top-3 flex w-36 -translate-x-1/2 flex-col items-center text-center outline-none;
+    @apply absolute left-[var(--node-x)] top-0 flex w-36 -translate-x-1/2 flex-col items-center text-center outline-none;
   }
 
-  .skill-node-face {
-    @apply grid size-20 place-items-center rounded-full border-4 text-white transition-transform duration-150 hover:-translate-y-1 active:translate-y-1;
-    border-color: var(--skill-light);
-    background: radial-gradient(circle at 38% 28%, var(--skill-light), var(--skill) 58%);
-    box-shadow: 0 7px 0 var(--skill-dark), 0 10px 16px rgb(60 60 60 / 10%);
-  }
-
-  .skill-node-face svg {
-    @apply size-10;
-  }
-
-  .skill-node:active .skill-node-face {
-    box-shadow: 0 2px 0 var(--skill-dark);
-  }
-
-  .skill-node:focus-visible .skill-node-face {
-    @apply outline-3 outline-offset-4 outline-eel-blue;
-  }
-
-  .skill-node-gold .skill-node-face {
-    box-shadow: 0 7px 0 var(--skill-dark), 0 0 0 5px #fff4bf, 0 10px 20px rgb(217 154 0 / 20%);
+  .skill-node {
+    --level-w: 5.5rem;
+    --level-h: 4.75rem;
+    --ring-size: 7.25rem;
+    --ring-width: 5px;
+    --ledge: 7px;
   }
 
   .skill-stars {
-    @apply mt-3 flex gap-0.5 text-lg leading-none text-swan;
+    @apply mt-1 flex gap-0.5 text-lg leading-none text-swan;
   }
 
   .skill-stars .skill-star-earned {
@@ -216,12 +304,12 @@
   }
 
   .skill-preview {
-    @apply relative mt-6 flex items-center gap-5 rounded-2xl border-2 border-swan bg-owl-pale/30 p-5 pr-9 shadow-[0_3px_0_#e5e5e5];
+    @apply relative mt-6 flex items-center gap-5 rounded-2xl border-2 border-swan bg-accent-pale/30 p-5 pr-9 shadow-[0_3px_0_#e5e5e5];
   }
 
   @media (max-width: 639px) {
     .skill-path-item { height: 9rem; }
-    .skill-node-face { width: 4.5rem; height: 4.5rem; }
+    .skill-node { --level-w: 4.5rem; --level-h: 3.9rem; --ring-size: 6rem; --ledge: 6px; }
     .skill-node { width: 7rem; }
   }
 
@@ -238,7 +326,20 @@
   }
 
   .practice-progress div {
-    @apply h-full rounded-full bg-owl transition-[width] duration-300;
+    @apply relative h-full rounded-full bg-accent;
+    min-width: 1rem;
+    transition: width 450ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Duolingo's glossy stripe along the top of the fill. */
+  .practice-progress div::after {
+    @apply absolute rounded-full;
+    content: "";
+    top: 25%;
+    left: 0.5rem;
+    right: 0.5rem;
+    height: 28%;
+    background: rgb(255 255 255 / 30%);
   }
 
   .practice-main {
@@ -262,7 +363,7 @@
   }
 
   .practice-feedback-correct {
-    @apply bg-owl-pale text-owl-deep;
+    @apply bg-accent-pale text-accent-deep;
   }
 
   .practice-feedback-wrong {
@@ -279,6 +380,28 @@
 
   .agent-dialog-card {
     @apply relative max-h-[85dvh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8;
+  }
+
+  .reveal-up {
+    animation: reveal-up 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  }
+
+  .pop-in {
+    animation: pop-in 0.3s cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+
+  @keyframes press-pop {
+    0% { scale: 1; }
+    35% { scale: 0.96; }
+    100% { scale: 1; }
+  }
+
+  @keyframes reveal-up {
+    from { opacity: 0; translate: 0 10px; }
+  }
+
+  @keyframes pop-in {
+    from { scale: 0; rotate: -30deg; }
   }
 
   .settings-tab {
@@ -306,11 +429,11 @@
   }
 
   .notice-success {
-    @apply rounded-xl border-2 border-owl-pale bg-[#f2fde9] px-4 py-3 text-sm font-bold text-owl-deep;
+    @apply rounded-xl border-2 border-accent-pale bg-accent-pale/40 px-4 py-3 text-sm font-bold text-accent-deep;
   }
 
   .toggle {
-    @apply relative inline-flex h-8 w-14 shrink-0 cursor-pointer items-center rounded-full bg-swan transition-colors has-[:checked]:bg-owl has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-eel-blue;
+    @apply relative inline-flex h-8 w-14 shrink-0 cursor-pointer items-center rounded-full bg-swan transition-colors has-[:checked]:bg-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-eel-blue;
   }
 
   .toggle input {
@@ -360,104 +483,197 @@
 .book-artwork {
   position: relative;
   width: 100%;
-  aspect-ratio: 8 / 7;
+  aspect-ratio: 1;
   container-type: inline-size;
   isolation: isolate;
 }
 
-.book-scene {
+/* Base: the same chunky level button as the subject nodes. */
+.book-base {
   position: absolute;
-  inset: 0;
-  perspective: 1000px;
-  perspective-origin: 50% 42%;
+  left: 26cqw;
+  bottom: 2cqw;
+  display: grid;
+  place-items: center;
+  width: 48cqw;
+  height: 48cqw;
+  padding-bottom: 3cqw;
 }
 
-.book-turntable {
-  position: absolute;
-  left: 20%;
-  top: 35%;
-  width: 60%;
-  height: 42%;
-  transform-style: preserve-3d;
+/* The ledge is its own shape (straight sides, rounded bottom) so the button
+   reads as a solid cylinder instead of two stacked ovals. */
+.book-base-button {
+  position: relative;
+  width: 35cqw;
+  height: 30.5cqw;
+  transition: translate 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.book-assembly {
+.book-base-ledge {
   position: absolute;
-  inset: 0;
-  z-index: 2;
-  transform: rotateX(68deg) translateZ(2cqw);
-  transform-style: preserve-3d;
-  animation: book-hover 3.2s ease-in-out infinite;
+  inset: 50% 0 auto;
+  height: calc(15.25cqw + 3.4cqw);
+  border-radius: 0 0 50% 50% / 0 0 15.25cqw 15.25cqw;
+  background: var(--color-accent-deep);
+  transition: height 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.book-spin {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  animation: book-spin 12s linear infinite;
-}
-
-.book-page,
-.book-cover {
-  position: absolute;
-  top: 0;
-  width: 51%;
+.book-base-face {
+  position: relative;
   height: 100%;
-  backface-visibility: visible;
-}
-
-.book-page {
-  z-index: 2;
-  overflow: hidden;
-  border: 0.8cqw solid #3c3c3c;
-  background: linear-gradient(105deg, #fffef5, #fff 55%, #edf7fa);
-}
-
-.book-page-left {
-  left: 0;
-  border-radius: 12% 3% 4% 12%;
-  transform-origin: right center;
-  transform: rotateY(-19deg);
-}
-
-.book-page-right {
-  right: 0;
-  border-radius: 3% 12% 12% 4%;
-  transform-origin: left center;
-  transform: rotateY(19deg);
-}
-
-.book-cover {
-  top: 5%;
-  height: 105%;
-  border: 0.8cqw solid #58a700;
-  background: #58cc02;
-}
-
-.book-cover-left {
-  left: -2%;
-  border-radius: 12% 3% 4% 12%;
-  transform: rotateY(-19deg) translateZ(-1.5cqw);
-  transform-origin: right center;
-}
-
-.book-cover-right {
-  right: -2%;
-  border-radius: 3% 12% 12% 4%;
-  transform: rotateY(19deg) translateZ(-1.5cqw);
-  transform-origin: left center;
-}
-
-.book-spine {
-  position: absolute;
-  z-index: 3;
-  left: 48.5%;
-  top: 2%;
-  width: 3%;
-  height: 98%;
   border-radius: 50%;
-  background: linear-gradient(90deg, #d5e6e8, #fff, #c4d9dd);
-  transform: translateZ(0.8cqw);
+  background: var(--accent);
+}
+
+/* Hover: the button grows taller, then the book and halo rise after it. */
+.book-artwork:hover .book-base-button { translate: 0 -2cqw; }
+.book-artwork:hover .book-base-ledge { height: calc(15.25cqw + 5.4cqw); }
+
+.book-base-face::before {
+  position: absolute;
+  inset: 10% 16% auto;
+  height: 24%;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 24%);
+  content: "";
+}
+
+/* The floating book's shadow; shrinks as the book rises. */
+.book-base-shadow {
+  position: absolute;
+  left: 28%;
+  top: 50%;
+  width: 44%;
+  height: 20%;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 9%);
+  animation: book-shadow 3.2s ease-in-out infinite;
+}
+
+.book-float {
+  position: absolute;
+  inset: 0;
+  animation: book-hover 3.2s ease-in-out infinite;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.book-artwork:hover .book-float {
+  transform: translateY(-4.5cqw);
+  transition-delay: 60ms;
+}
+
+.book-halo {
+  position: absolute;
+  z-index: 2;
+  left: 33cqw;
+  top: 13cqw;
+  width: 34cqw;
+  overflow: visible;
+  transition: transform 340ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.book-artwork:hover .book-halo {
+  transform: translateY(-2.5cqw);
+  transition-delay: 130ms;
+}
+
+.book3d-scene {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  perspective: 150cqw;
+  perspective-origin: 50% 20%;
+}
+
+.book3d-camera {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform-style: preserve-3d;
+  transform: rotateX(-24deg);
+}
+
+.book3d-group,
+.book3d-box,
+.book3d-spin,
+.book3d-tilt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-style: preserve-3d;
+}
+
+.book3d-tilt { transform: rotateX(22deg); }
+
+.book3d-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.book3d-slice {
+  position: absolute;
+  inset: 0;
+}
+
+.book3d-paper { background: #fff; }
+.book3d-paper-shade { background: #e6e2d3; }
+
+.book3d-spin { animation: book-spin 18s linear infinite; }
+
+/* Outside cover: thin light inner border and a title label. */
+.book3d-cover {
+  border-radius: 4cqw;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1.3cqw var(--accent), inset 0 0 0 1.9cqw var(--color-accent-light), inset 0 -1.4cqw 0 var(--accent-shade);
+}
+
+.book3d-cover::before {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: 17%;
+  height: 17%;
+  border-radius: 1.2cqw;
+  background:
+    linear-gradient(#1cb0f6 0 0) center 32% / 62% 16% no-repeat,
+    linear-gradient(#a8e1fb 0 0) center 72% / 44% 13% no-repeat,
+    #fff;
+  box-shadow: 0 0.7cqw 0 var(--color-accent-deep);
+  content: "";
+}
+
+.book3d-cover-inside {
+  border-radius: 4cqw;
+  background: linear-gradient(90deg, var(--accent-dark), var(--color-accent-deep) 35%);
+  box-shadow: inset 0 0 0 0.8cqw var(--accent-dark);
+}
+
+.book3d-cover-edge { background: var(--color-accent-deep); }
+
+.book3d-spine {
+  border-radius: 1.5cqw;
+  background:
+    linear-gradient(var(--color-accent-light) 0 0) center 14% / 100% 4% no-repeat,
+    linear-gradient(var(--color-accent-light) 0 0) center 86% / 100% 4% no-repeat,
+    var(--accent-shade);
+}
+
+.page-ribbon {
+  position: absolute;
+  right: 16%;
+  top: -1%;
+  width: 9%;
+  height: 34%;
+  background: #ff4b4b;
+  box-shadow: inset -0.5cqw 0 0 #e03c3c;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+}
+
+.book3d-page {
+  overflow: hidden;
+  border-radius: 3cqw;
+  background: linear-gradient(105deg, #fffef5, #fff 60%, #eef8fb);
 }
 
 .page-title,
@@ -469,47 +685,12 @@
   background: #1cb0f6;
 }
 
-.page-title { left: 17%; top: 17%; width: 58%; height: 5%; }
-.page-line { left: 17%; height: 3.5%; opacity: 0.72; }
-.line-one { top: 32%; width: 66%; }
-.line-two { top: 42%; width: 58%; }
-.line-three { top: 52%; width: 65%; }
-.page-diagram { left: 26%; top: 65%; width: 42%; height: 19%; border-radius: 2cqw; background: #dbf8c5; border: 0.6cqw solid #58cc02; }
-.diagram-right { background: #fff3d1; border-color: #ffc800; }
-
-.book-plate {
-  position: absolute;
-  left: -8%;
-  top: 52%;
-  width: 116%;
-  height: 90%;
-  border-radius: 50%;
-  background: #58cc02;
-  box-shadow: 0 3cqw 0 #58a700, 0 5cqw 2cqw rgb(60 60 60 / 16%);
-  transform: rotateX(72deg) translateZ(-8cqw);
-  transform-style: preserve-3d;
-}
-
-.book-plate-top {
-  position: absolute;
-  inset: 5%;
-  border: 0.7cqw solid #89e219;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #89e219, #68d609 65%, #58cc02);
-}
-
-.book-halo {
-  position: absolute;
-  z-index: 3;
-  left: 18%;
-  top: -45%;
-  width: 64%;
-  height: 42%;
-  border: 3cqw solid #ffc800;
-  border-radius: 50%;
-  box-shadow: 0 0.8cqw 0 #e5ad00, inset 0 0.8cqw 0 #ffe168;
-  transform: rotateX(70deg) translateZ(10cqw);
-}
+.page-title { left: 15%; top: 14%; width: 58%; height: 5%; }
+.page-line { left: 15%; height: 3.5%; opacity: 0.72; }
+.line-one { top: 30%; width: 68%; }
+.line-two { top: 40%; width: 60%; }
+.line-three { top: 50%; width: 66%; }
+.page-diagram { left: 22%; top: 64%; width: 52%; height: 20%; border-radius: 2cqw; background: var(--color-accent-pale); border: 0.6cqw solid var(--accent); }
 
 .book-spark {
   position: absolute;
@@ -525,18 +706,23 @@
 .book-spark-two { right: 12%; top: 43%; width: 2%; background: #1cb0f6; }
 
 @keyframes book-spin {
-  from { transform: rotateY(-18deg); }
-  to { transform: rotateY(342deg); }
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
 }
 
 @keyframes book-hover {
   0%, 100% { translate: 0 0; }
-  50% { translate: 0 -2cqw; }
+  50% { translate: 0 -2.5cqw; }
+}
+
+@keyframes book-shadow {
+  0%, 100% { scale: 1; opacity: 1; }
+  50% { scale: 0.85; opacity: 0.7; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .book-spin { animation: none; transform: rotateY(-18deg); }
-  .book-assembly { animation: none; }
+  .book3d-spin { animation: none; transform: rotateY(-20deg); }
+  .book-float, .book-base-shadow { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
 }

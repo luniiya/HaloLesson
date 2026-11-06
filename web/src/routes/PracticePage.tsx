@@ -68,18 +68,18 @@ export default function PracticePage() {
       {complete ? (
         <main className="practice-complete">
           <div className="grid size-28 place-items-center rounded-full bg-bee text-white shadow-[0_7px_0_#d99a00]" aria-hidden="true"><IconStarFilled size={62} /></div>
-          <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-owl-deep">Practice complete</p>
+          <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-accent-deep">Practice complete</p>
           <h1 className="mt-2 text-3xl font-black">Nice work!</h1>
           <p className="mt-3 font-semibold text-wolf">You practiced {session.skillTitle}.</p>
           <div className="mt-8 grid w-full grid-cols-2 gap-4">
-            <div className="rounded-2xl border-2 border-swan p-5"><strong className="block text-3xl font-black text-owl-deep">{Math.round(correctCount / session.exercises.length * 100)}%</strong><span className="text-xs font-black uppercase text-wolf">Accuracy</span></div>
+            <div className="rounded-2xl border-2 border-swan p-5"><strong className="block text-3xl font-black text-accent-deep">{Math.round(correctCount / session.exercises.length * 100)}%</strong><span className="text-xs font-black uppercase text-wolf">Accuracy</span></div>
             <div className="rounded-2xl border-2 border-swan p-5"><strong className="block text-3xl font-black text-eel-blue">{correctCount}/{session.exercises.length}</strong><span className="text-xs font-black uppercase text-wolf">Correct</span></div>
           </div>
           <Link to={`/subjects/${session.subjectId}`} className="button button-primary mt-8 w-full">Back to my path</Link>
         </main>
       ) : (
         <main className="practice-main">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-owl-deep">{session.subjectName} · {session.skillTitle}</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-accent-deep">{session.subjectName} · {session.skillTitle}</p>
           <h1 className="mt-3 text-2xl font-black leading-tight sm:text-3xl">{exercise.prompt}</h1>
           <form onSubmit={checkAnswer} className="mt-8">
             {exercise.type === "multiple_choice" ? (

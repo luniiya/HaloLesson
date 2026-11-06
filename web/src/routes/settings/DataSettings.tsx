@@ -65,7 +65,7 @@ export function ImportPanel({ onImported }: { onImported?: (result: ImportResult
       >
         <IconFileUpload size={32} className="text-eel-blue" aria-hidden="true" />
         <span className="font-extrabold text-ink">{busy ? "Importing…" : "Drop a .json file or click to choose"}</span>
-        <span className="text-xs font-semibold text-wolf">haloLesson backups, shared subjects, or Create with AI output</span>
+        <span className="text-xs font-semibold text-wolf">haloLesson backups, shared subjects, or agent JSON output</span>
       </button>
       <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void importFile(event.target.files?.[0]); event.target.value = ""; }} />
       <label className="form-label">Or paste JSON

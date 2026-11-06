@@ -27,7 +27,7 @@ function AgentTokensCard() {
           <h2 className="settings-card-title">Agent tokens</h2>
           <p className="settings-card-hint">Each agent prompt you copy carries its own token with full access to your lessons. They don't expire; revoke any you no longer use.</p>
         </div>
-        <Button variant="secondary" className="shrink-0 gap-2" onClick={() => setConnecting(true)}><IconPlugConnected size={19} />Connect an agent</Button>
+        <Button variant="secondary" className="shrink-0 gap-2" onClick={() => setConnecting(true)}><IconPlugConnected size={19} />Connect agent</Button>
       </div>
       {error && <p role="alert" className="notice-error mt-4">{error}</p>}
       {!tokens && !error && <div className="mt-5 h-24 animate-pulse rounded-xl bg-eel" aria-label="Loading agent tokens" />}
@@ -111,11 +111,11 @@ function SessionsCard() {
             const DeviceIcon = session.device === "mobile" ? IconDeviceMobile : IconDeviceDesktop;
             return (
               <li key={session.id} className="flex items-center gap-4 px-4 py-3.5">
-                <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${session.current ? "bg-owl-pale text-owl-deep" : "bg-eel text-wolf"}`} aria-hidden="true"><DeviceIcon size={24} /></span>
+                <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${session.current ? "bg-accent-pale text-accent-deep" : "bg-eel text-wolf"}`} aria-hidden="true"><DeviceIcon size={24} /></span>
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-2 font-extrabold">
                     {session.label}
-                    {session.current && <span className="rounded-full bg-owl-pale px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-owl-deep">This device</span>}
+                    {session.current && <span className="rounded-full bg-accent-pale px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-accent-deep">This device</span>}
                   </p>
                   <p className="text-xs font-semibold text-wolf">
                     {session.current ? "Active now" : formatRelative(session.lastSeenAt)}<span className="mx-1.5 text-swan">•</span>Signed in {formatDate(session.createdAt)}

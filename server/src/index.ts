@@ -28,6 +28,7 @@ import { buildExport, getExportStats, importSubjects, parseImport } from "./data
 import { eventStream, libraryChanged } from "./events";
 import { getPracticeSession, submitAttempt } from "./practice";
 import { getSettings, updateSettings } from "./settings";
+import { copySharedSubject, createShareLink, getShareLink, getSharedSubject, revokeShareLink } from "./shares";
 import { createSubject, getSubject, listSubjects } from "./subjects";
 
 const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
@@ -172,6 +173,7 @@ const server = Bun.serve({
             email: input.email === null ? null : optionalString(input.email),
             password: optionalString(input.password) || undefined,
             avatar,
+            accentColor: input.accentColor === null ? null : optionalString(input.accentColor),
             currentPassword: optionalString(input.currentPassword),
           }));
         } catch (error) {
@@ -402,6 +404,49 @@ const server = Bun.serve({
       } catch (error) {
         return errorResponse(error);
       }
+    },
+    "/api/subjects/:id/share": {
+      GET: (req) => {
+        try {
+          return Response.json({ link: getShareLink(requireUser(req).id, req.params.id) });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      POST: (req) => {
+        try {
+          return Response.json({ link: createShareLink(requireUser(req).id, req.params.id) });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      DELETE: (req) => {
+        try {
+          revokeShareLink(requireUser(req).id, req.params.id);
+          return new Response(null, { status: 204 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/shared/:token": (req) => {
+      try {
+        return Response.json(getSharedSubject(requireUser(req).id, req.params.token));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+    "/api/shared/:token/copy": {
+      POST: (req) => {
+        try {
+          const user = requireUser(req);
+          const subject = copySharedSubject(user.id, req.params.token);
+          libraryChanged(user.id, subject.id);
+          return Response.json(subject, { status: 201 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
     },
     "/api/skills/:id/practice": (req) => {
       try {

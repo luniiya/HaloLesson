@@ -6,7 +6,7 @@ import { useAuth } from "$lib/auth";
 
 const toggles: Array<{ key: keyof Settings; title: string; hint: string }> = [
   { key: "signupEnabled", title: "Allow sign ups", hint: "When off, only admins can create accounts (from Users)." },
-  { key: "requireStrongPasswords", title: "Require strong passwords", hint: "At least 8 characters with 2 of: uppercase, lowercase, numbers, symbols." },
+  { key: "requireStrongPasswords", title: "Complex password requirement", hint: "Passwords need at least 8 characters and 2 of: uppercase, lowercase, numbers, symbols. When off, any non-empty password works." },
   { key: "requireEmail", title: "Require an email address", hint: "New accounts must give an email, and nobody can remove theirs." },
 ];
 

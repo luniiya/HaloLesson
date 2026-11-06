@@ -1,4 +1,5 @@
 import {
+  isValidAccent,
   isValidUsername,
   USERNAME_CHANGE_COOLDOWN_DAYS,
   validatePassword,
@@ -14,8 +15,8 @@ const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 // last_seen_at is only bumped this often per session, so an active session
 // doesn't turn every API call into a write.
 const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 10;
+const LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_RULES = "Username must be 3-32 characters: letters, numbers, ., - and _ only";
 
@@ -30,6 +31,7 @@ export interface UserRow {
   avatar: string | null;
   is_admin: number;
   username_changed_at: string | null;
+  accent_color: string | null;
 }
 
 interface SessionRow {
@@ -49,6 +51,7 @@ export function toUser(row: UserRow): User {
     avatar: row.avatar,
     isAdmin: row.is_admin === 1,
     usernameChangedAt: row.username_changed_at,
+    accentColor: row.accent_color,
   };
 }
 
@@ -196,6 +199,7 @@ async function insertUser(username: string, password: string, email: string | nu
     avatar: null,
     is_admin: isAdmin ? 1 : 0,
     username_changed_at: null,
+    accent_color: null,
   };
   db.run("INSERT INTO users (id, username, email, password_hash, created_at, is_admin) VALUES (?, ?, ?, ?, ?, ?)", [
     row.id,
@@ -239,7 +243,8 @@ export async function login(identifier: string, password: string, userAgent: str
     .get(identifier, identifier);
   const valid = row ? await Bun.password.verify(password, row.password_hash) : false;
   if (!row || !valid) {
-    const next = attempt ?? { failures: 0, lockedUntil: null };
+    // An expired lock starts a fresh count, so one typo after waiting doesn't relock.
+    const next = attempt && !attempt.lockedUntil ? attempt : { failures: 0, lockedUntil: null };
     next.failures += 1;
     if (next.failures >= MAX_LOGIN_ATTEMPTS) next.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
     loginAttempts.set(identifier, next);
@@ -261,7 +266,7 @@ export function endSession(req: Request): void {
 export async function updateAccount(
   userId: string,
   currentToken: string | null,
-  updates: { username?: string; email?: string | null; password?: string; avatar?: string | null; currentPassword?: string },
+  updates: { username?: string; email?: string | null; password?: string; avatar?: string | null; accentColor?: string | null; currentPassword?: string },
 ): Promise<User> {
   const row = userRow(userId);
   const sensitive = updates.username !== undefined || updates.email !== undefined || updates.password !== undefined;
@@ -288,6 +293,8 @@ export async function updateAccount(
   const email = updates.email === undefined ? undefined : normalizeEmail(updates.email);
   if (email !== undefined) checkEmail(email, userId);
   if (updates.password !== undefined) checkPassword(updates.password);
+  const accentColor = updates.accentColor === null ? null : updates.accentColor?.toLowerCase();
+  if (accentColor != null && !isValidAccent(accentColor)) throw new Error("Accent color must be a hex color like #7c5cff");
   const passwordHash = updates.password === undefined ? null : await Bun.password.hash(updates.password);
 
   db.transaction(() => {
@@ -300,6 +307,7 @@ export async function updateAccount(
       db.run("DELETE FROM sessions WHERE user_id = ? AND token != ?", [userId, currentToken ?? ""]);
     }
     if (updates.avatar !== undefined) db.run("UPDATE users SET avatar = ? WHERE id = ?", [updates.avatar, userId]);
+    if (accentColor !== undefined) db.run("UPDATE users SET accent_color = ? WHERE id = ?", [accentColor, userId]);
   })();
   return toUser(userRow(userId));
 }

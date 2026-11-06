@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router";
-import { IconDatabase, IconDevices, IconServer, IconUser, IconUsers, type Icon } from "@tabler/icons-react";
+import { IconDatabase, IconDevices, IconPalette, IconServer, IconUser, IconUsers, type Icon } from "@tabler/icons-react";
 import { useAuth } from "$lib/auth";
 
 interface Tab {
@@ -10,6 +10,7 @@ interface Tab {
 
 const accountTabs: Tab[] = [
   { to: "/settings", label: "Account", icon: IconUser },
+  { to: "/settings/appearance", label: "Appearance", icon: IconPalette },
   { to: "/settings/sessions", label: "Sessions", icon: IconDevices },
   { to: "/settings/data", label: "Import & export", icon: IconDatabase },
 ];
@@ -34,7 +35,7 @@ export default function SettingsLayout() {
   return (
     <div className="mx-auto max-w-5xl px-5 pb-28 pt-8 sm:px-8 md:pb-16 md:pt-10">
       <header className="mb-6">
-        <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-owl-deep">Settings</p>
+        <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-accent-deep">Settings</p>
         <h1 className="text-[2rem] font-black leading-tight tracking-tight sm:text-4xl">Your account</h1>
       </header>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">

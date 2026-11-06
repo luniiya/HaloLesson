@@ -12,12 +12,17 @@ function SkillIcon({ position, gold }: { position: number; gold: boolean }) {
   }
 }
 
-export default function SkillNode({ skill, palette, onSelect }: { skill: Skill; palette: [string, string, string]; onSelect: (skill: Skill) => void }) {
+export default function SkillNode({ skill, palette, onSelect }: { skill: Skill; palette: [string, string]; onSelect: (skill: Skill) => void }) {
   const gold = skill.stars === 3;
-  const [base, dark, light] = gold ? ["#ffc800", "#d99a00", "#ffe168"] : palette;
+  const [base, dark] = gold ? ["#ffc800", "#d99a00"] : palette;
   return (
-    <button type="button" className={`skill-node ${gold ? "skill-node-gold" : ""}`} style={{ "--skill": base, "--skill-dark": dark, "--skill-light": light } as CSSProperties} onClick={() => onSelect(skill)} aria-label={`${skill.title}, ${skill.stars} of 3 stars, ${Math.round(skill.mastery * 100)} percent mastery`}>
-      <span className="skill-node-face"><SkillIcon position={skill.position} gold={gold} /></span>
+    <button type="button" className="level skill-node" style={{ "--level": base, "--level-dark": dark, "--progress": `${Math.round(skill.mastery * 100)}%` } as CSSProperties} onClick={() => onSelect(skill)} aria-label={`${skill.title}, ${skill.stars} of 3 stars, ${Math.round(skill.mastery * 100)} percent mastery`}>
+      <span className="level-ring">
+        <span className="level-button">
+          <span className="level-ledge" />
+          <span className="level-face"><SkillIcon position={skill.position} gold={gold} /></span>
+        </span>
+      </span>
       <span className="skill-stars" aria-hidden="true">
         {[0, 1, 2].map((star) => <IconStarFilled key={star} size={18} className={star < skill.stars ? "skill-star-earned" : ""} />)}
       </span>

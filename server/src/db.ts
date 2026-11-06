@@ -113,6 +113,7 @@ const userColumns = columnsOf("users");
 if (!userColumns.includes("avatar")) db.exec("ALTER TABLE users ADD COLUMN avatar TEXT");
 if (!userColumns.includes("is_admin")) db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
 if (!userColumns.includes("username_changed_at")) db.exec("ALTER TABLE users ADD COLUMN username_changed_at TEXT");
+if (!userColumns.includes("accent_color")) db.exec("ALTER TABLE users ADD COLUMN accent_color TEXT");
 
 // Databases created before admin roles existed: the oldest account becomes admin,
 // matching what a fresh install does for the first registered user.
@@ -160,6 +161,16 @@ db.exec(`
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_id TEXT,
     message TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+`);
+
+// Share links: one revocable token per subject. The link always shows the
+// owner's latest version; viewers copy it into their own library.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS subject_shares (
+    token TEXT PRIMARY KEY,
+    subject_id TEXT UNIQUE NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL
   );
 `);

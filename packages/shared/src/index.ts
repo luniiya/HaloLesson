@@ -34,6 +34,23 @@ export interface User {
   avatar: string | null;
   isAdmin: boolean;
   usernameChangedAt: string | null;
+  // Hex like "#7c5cff"; null means DEFAULT_ACCENT.
+  accentColor: string | null;
+}
+
+// The app's accent color drives buttons, highlights and the book artwork.
+export const DEFAULT_ACCENT = "#7c5cff";
+export const ACCENT_PRESETS = [
+  { name: "Violet", color: "#7c5cff" },
+  { name: "Ocean", color: "#1a9fe0" },
+  { name: "Teal", color: "#12b5a5" },
+  { name: "Pink", color: "#ec4f9a" },
+  { name: "Coral", color: "#ff6b4a" },
+  { name: "Green", color: "#58cc02" },
+] as const;
+
+export function isValidAccent(color: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(color);
 }
 
 // Self-service username changes are limited to once per this many days.
@@ -105,6 +122,20 @@ export interface SubjectDetail {
   units: Array<Unit & { skills: Skill[] }>;
 }
 
+export interface ShareLink {
+  token: string;
+  createdAt: string;
+}
+
+// What a share link shows: the subject's outline, no answers or progress.
+export interface SharedSubject {
+  token: string;
+  owner: string;
+  isOwner: boolean;
+  subject: Pick<Subject, "name" | "description" | "color" | "gradientStart" | "gradientEnd" | "unitCount" | "skillCount">;
+  units: Array<{ title: string; description: string; skills: Array<{ title: string; description: string; exerciseCount: number }> }>;
+}
+
 export type ExerciseType = "multiple_choice" | "free_text";
 
 export interface Exercise {
@@ -172,8 +203,8 @@ export interface ExportSubject {
   units: Array<{ title: string; description: string; skills: ExportSkill[] }>;
 }
 
-// Backup / share format. Import also accepts the bare `{ subject, units }`
-// shape the Create with AI prompt asks agents to return.
+// Backup / share format. Import also accepts a bare `{ subject, units }`
+// object for a single subject.
 export interface ExportFile {
   format: "halolesson";
   formatVersion: 1;

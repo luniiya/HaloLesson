@@ -114,7 +114,7 @@ export default function AdminUsers() {
                     <p className="flex flex-wrap items-center gap-2 font-extrabold">
                       <span className="truncate">{user.username}</span>
                       {user.isAdmin && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-eel-blue">Admin</span>}
-                      {user.id === me.id && <span className="rounded-full bg-owl-pale px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-owl-deep">You</span>}
+                      {user.id === me.id && <span className="rounded-full bg-accent-pale px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-accent-deep">You</span>}
                     </p>
                     <p className="truncate text-xs font-semibold text-wolf">
                       {user.email ?? "No email"}<span className="mx-1.5 text-swan">•</span>{user.subjectCount} {user.subjectCount === 1 ? "subject" : "subjects"}, {user.skillCount} {user.skillCount === 1 ? "skill" : "skills"}

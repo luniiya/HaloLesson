@@ -16,19 +16,14 @@ const symbols = [IconAtom, IconWorld, IconMathFunction, IconFlask, IconCode, Ico
 
 export default function SubjectNode({ subject, index, total }: { subject: Subject; index: number; total: number }) {
   const navigate = useNavigate();
-  const angle = -90 + index * 360 / total;
-  const radians = angle * Math.PI / 180;
   const dark = colors[subject.color][1];
   const color = subject.gradientStart;
-  const light = subject.gradientEnd;
   const hash = [...subject.id].reduce((value, character) => (value * 31 + character.charCodeAt(0)) >>> 0, 7);
   const Symbol = symbols[hash % symbols.length];
   const style = {
-    "--subject": color,
-    "--subject-dark": dark,
-    "--subject-light": light,
-    left: `${50 + Math.cos(radians) * 38}%`,
-    top: `${50 + Math.sin(radians) * 37}%`,
+    "--level": color,
+    "--level-dark": dark,
+    "--angle": `${-90 + index * 360 / total}deg`,
   } as CSSProperties;
 
   function openSubject(event: MouseEvent<HTMLAnchorElement>) {
@@ -41,10 +36,17 @@ export default function SubjectNode({ subject, index, total }: { subject: Subjec
 
   return (
     <div className="subject-node-position" style={style}>
-      <Link to={`/subjects/${subject.id}`} onClick={openSubject} className="subject-node group" aria-label={`Open ${subject.name}, ${subject.skillCount} skills`}>
-        <span className="subject-node-face"><Symbol size={48} stroke={2.2} aria-hidden="true" /></span>
-        <span className="subject-node-label">{subject.name}</span>
-        <span className="subject-node-meta">{subject.skillCount === 0 ? "New path" : `${subject.skillCount} ${subject.skillCount === 1 ? "skill" : "skills"}`}</span>
+      <Link to={`/subjects/${subject.id}`} onClick={openSubject} className="level subject-node group" aria-label={`Open ${subject.name}, ${subject.skillCount} skills`}>
+        <span className="level-ring">
+          <span className="level-button">
+            <span className="level-ledge" />
+            <span className="level-face"><Symbol stroke={2.4} aria-hidden="true" /></span>
+          </span>
+        </span>
+        <span className="subject-node-tip" aria-hidden="true">
+          <span className="subject-node-label">{subject.name}</span>
+          <span className="subject-node-meta">{subject.skillCount === 0 ? "New path" : `${subject.skillCount} ${subject.skillCount === 1 ? "skill" : "skills"}`}</span>
+        </span>
       </Link>
     </div>
   );

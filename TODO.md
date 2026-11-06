@@ -28,18 +28,24 @@
 - [x] Build the practice player with progress, multiple-choice and free-text exercises, hidden corrections, and result feedback
 - [x] Add the future AI lesson-generation entry point and copy-prompt interaction placeholder
 - [x] Use Tabler icons for interface icons instead of ASCII arrows or ad-hoc glyphs
+- [x] Rebuild subject and skill nodes as shared chunky 3D Duolingo level buttons (straight-sided ledge, gloss, hover lift, mastery progress ring)
+- [x] Clean the subjects page: remove extra labels and "Made by you", center the orbit, anchor stats at the bottom
+- [x] Add the glossy Duolingo stripe to the practice progress bar
+- [x] Subject page: wave skill path, Share button in the title row, full-width description
+- [x] Share links backend: revocable per-subject link, outline preview, "copy to my library" route, tests in `server/test/subjects`
+- [x] Appearance settings: per-user accent color (presets + custom) recoloring buttons, highlights, logo and the 3D book; brand default moved off green to violet `#7c5cff`
+- [x] Subjects orbit: true-circle orbit with rings centered on it, white ring fill hiding the dashes, names moved to a hover/focus tooltip
+- [x] Share choice dialog on the subject page (link with copy/revoke, or export file)
+- [x] `/shared/:token` preview page with "Add to my library"
+- [ ] Make the subject page more Duolingo: skill popover with START under the node, bouncing START on the next skill, 3D unit banner icon, name-based subject icons
 - [ ] Add responsive behavior for desktop, tablet, and mobile web
 - [ ] Add loading, error, empty, hover, focus, pressed, and disabled states
 - [ ] Add reduced-motion support and keyboard accessibility
-- [ ] Capture bwl screenshots of every major screen at desktop and mobile sizes on exposed port 7270
-- [ ] Visually review each screen against the local Duolingo references
-- [ ] Fix spacing, hierarchy, alignment, overflow, and interaction issues found by each review
-- [ ] Repeat screenshot review after every visual fix until no material issues remain
 - [ ] Run the final build, type checks, and end-to-end user flow after UI changes
 
 ## After UI
 
-- [ ] Clarify the dingcad-inspired agent generation flow
-- [ ] Implement AI-assisted lesson generation and import
+- [x] Clarify the dingcad-inspired agent generation flow
+- [x] Implement AI-assisted lesson generation and import
 - [ ] Add adaptive practice selection based on recency and performance
 - [ ] Tune mastery and three-star progression using real practice behavior

@@ -4,7 +4,8 @@ import { IconSparkles } from "@tabler/icons-react";
 import { mixColors } from "$lib/colors";
 import SkillNode from "./SkillNode";
 
-const pathPositions = [50, 65, 72, 61, 40, 28, 37];
+// Duolingo-style gentle wave: out to one side, back through the middle, out to the other.
+const pathPositions = [50, 61, 67, 61, 50, 39, 33, 39];
 
 export default function SkillPath({ detail, onSelect }: { detail: SubjectDetail; onSelect: (skill: Skill) => void }) {
   const { gradientStart, gradientEnd } = detail.subject;
@@ -27,7 +28,7 @@ export default function SkillPath({ detail, onSelect }: { detail: SubjectDetail;
               {unit.skills.map((skill, index) => {
                 const progress = totalSkills <= 1 ? 0 : (offset + index) / (totalSkills - 1);
                 const base = mixColors(gradientStart, gradientEnd, progress);
-                const palette: [string, string, string] = [base, mixColors(base, "#000000", 0.25), mixColors(base, "#ffffff", 0.35)];
+                const palette: [string, string] = [base, mixColors(base, "#000000", 0.25)];
                 return (
                   <li key={skill.id} className="skill-path-item" style={{ "--node-x": `${pathPositions[index % pathPositions.length]}%` } as CSSProperties}>
                     <SkillNode skill={skill} palette={palette} onSelect={onSelect} />
