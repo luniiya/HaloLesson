@@ -129,3 +129,37 @@ if (!sessionColumns.includes("id")) {
 if (!sessionColumns.includes("user_agent")) db.exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT");
 if (!sessionColumns.includes("last_seen_at")) db.exec("ALTER TABLE sessions ADD COLUMN last_seen_at TEXT");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id)");
+
+// Agent access: long-lived bearer tokens (only the SHA-256 is stored), a
+// per-user revision so agents can detect concurrent edits, and replayable
+// responses keyed by the agent's requestId so retries never apply twice.
+if (!columnsOf("users").includes("library_revision")) db.exec("ALTER TABLE users ADD COLUMN library_revision INTEGER NOT NULL DEFAULT 0");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS agent_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT UNIQUE NOT NULL,
+    hint TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_tokens_user ON agent_tokens(user_id);
+
+  CREATE TABLE IF NOT EXISTS agent_requests (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    body_hash TEXT NOT NULL,
+    response_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, request_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_reports (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_id TEXT,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+`);

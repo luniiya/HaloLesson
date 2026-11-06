@@ -1,5 +1,8 @@
 # Agent instructions
 
+- **Never commit, branch, stash or push.** The user manages git. Leave your changes
+  uncommitted in the working tree.
+
 - Whenever searching online, if the search tool fails, just use curl from
   this computer.
 
@@ -30,6 +33,21 @@ and keep cookies/logins.
   `bwl_downloads({ tabId, downloadId })` returns the contents.
 - The user can watch and take over every tab in the dashboard. On a captcha or
   a login you can't complete, ask them to finish it there, then continue.
+
+## Tests
+
+Write unit tests for as much as you can, and keep them fast: test run time matters.
+
+- Tests live in `server/test/<area>/*.test.ts` and run with `bun test`. Each area is a folder, so you only run the area you changed:
+  `bun run test:<area>` from `server/` (for example `bun run test:agent`). Use `bun run test` for everything before committing.
+- Areas so far: `auth` (register, login, lockout, sessions), `account` (profile and password changes, deletion), `admin` (users, server settings),
+  `data` (import and export), `agent` (tokens, agent API, MCP), `practice` (attempts and mastery), `subjects`.
+  When you add an area, add its folder and a `test:<area>` script in `server/package.json`, and list it here.
+- `server/test/setup.ts` (preloaded via `bunfig.toml`) points `DATA_DIR` at a fresh temp directory, so tests never touch `data/`.
+  Every run shares one database, so each test creates its own users with unique names instead of relying on global state.
+- Prefer calling module functions directly. Go through `Bun.serve` routes only when the HTTP behavior itself is what you're testing.
+  No sleeps or network calls, and no fixtures bigger than the test needs.
+- Changed an area? Run that area's tests. Changed shared code (`db.ts`, `packages/shared`, auth helpers)? Run them all.
 
 ## Persistent Memory Protocol
 

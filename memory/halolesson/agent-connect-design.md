@@ -30,3 +30,8 @@ Revised plan: one shared ops core, with two front doors.
 - REST at `/api/agent/*`, dingcad-style.
 - MCP at `/mcp` in the same Bun.serve, bwl-style.
 - Commits work at skill granularity (a skill and its exercises together), not one op per request.
+
+## Built *(as of 2026-11-06)*
+- Shipped (uncommitted on main): token API + Settings → Sessions "Agent tokens" card, REST `/api/agent/*`, MCP `/mcp`, SSE `/api/events` live refresh, `AgentPromptDialog` rewrite.
+- Verified E2E via Vite origin :7270 (MCP + REST + live pill). Tests: `bun run test:agent` (27 tests, ~110ms).
+- Follow-ups not done: admin view of agent reports; tests for other areas; set `PUBLIC_URL` in prod.

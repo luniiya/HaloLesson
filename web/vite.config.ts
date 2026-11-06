@@ -9,7 +9,9 @@ export default defineConfig({
     alias: { $lib: fileURLToPath(new URL("./src/lib", import.meta.url)) },
   },
   server: {
-    port: 5173,
-    proxy: { "/api": "http://localhost:7246" },
+    port: 7270,
+    host: true,
+    // /mcp too: agent prompts point at the origin the browser is using.
+    proxy: { "/api": "http://localhost:7246", "/mcp": "http://localhost:7246" },
   },
 });

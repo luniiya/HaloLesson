@@ -6,10 +6,19 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "bun test",
+    "test:auth": "bun test test/auth",
+    "test:account": "bun test test/account",
+    "test:admin": "bun test test/admin",
+    "test:data": "bun test test/data",
+    "test:agent": "bun test test/agent",
+    "test:practice": "bun test test/practice",
+    "test:subjects": "bun test test/subjects"
   },
   "dependencies": {
-    "@halolesson/shared": "workspace:*"
+    "@halolesson/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2"
   },
   "devDependencies": {
     "@types/bun": "latest",

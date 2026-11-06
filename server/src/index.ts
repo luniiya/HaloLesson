@@ -20,7 +20,12 @@ import {
   userCount,
   userFromRequest,
 } from "./auth";
+import { handleMcp } from "./agent/mcp";
+import { AgentError, commit, readLibrary, readProgress, readSubject, report } from "./agent/ops";
+import { buildAgentPrompt, buildAgentSpec } from "./agent/prompt";
+import { agentFromRequest, createAgentToken, listAgentTokens, RateLimitError, revokeAgentToken, type AgentAuth } from "./agent/tokens";
 import { buildExport, getExportStats, importSubjects, parseImport } from "./dataExport";
+import { eventStream, libraryChanged } from "./events";
 import { getPracticeSession, submitAttempt } from "./practice";
 import { getSettings, updateSettings } from "./settings";
 import { createSubject, getSubject, listSubjects } from "./subjects";
@@ -75,10 +80,43 @@ function jsonDownload(data: unknown, filename: string) {
   });
 }
 
+// Where agents should reach this server: the browser's origin when a user is
+// creating a token, else whatever host the request came in on.
+function publicOrigin(req: Request): string {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, "");
+  const origin = req.headers.get("origin");
+  if (origin && origin !== "null") return origin;
+  const url = new URL(req.url);
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || url.protocol.replace(":", "");
+  const host = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || req.headers.get("host") || url.host;
+  return `${proto}://${host}`;
+}
+
+async function agentRoute(req: Request, handler: (auth: AgentAuth) => unknown, status = 200) {
+  try {
+    const auth = agentFromRequest(req);
+    if (!auth) {
+      return Response.json(
+        { error: "Missing or revoked token. Ask the user to copy a new agent prompt", code: "UNAUTHORIZED" },
+        { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
+      );
+    }
+    return Response.json(await handler(auth), { status });
+  } catch (error) {
+    if (error instanceof AgentError) return Response.json({ error: error.message, code: error.code, ...error.extra }, { status: error.status });
+    if (error instanceof RateLimitError) return Response.json({ error: error.message, code: "RATE_LIMITED" }, { status: 429 });
+    if (error instanceof SyntaxError) return Response.json({ error: "Invalid JSON body", code: "INVALID" }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Something went wrong";
+    return Response.json({ error: message, code: message.endsWith("not found") ? "NOT_FOUND" : "INVALID" }, { status: message.endsWith("not found") ? 404 : 400 });
+  }
+}
+
 const webRoot = resolve(import.meta.dir, "../../web/dist");
 
 const server = Bun.serve({
   port: Number(process.env.PORT) || 7246,
+  // Above the event stream's 15s ping, so idle SSE connections stay open.
+  idleTimeout: 30,
   routes: {
     "/api/health": () => Response.json({ status: "ok", version: APP_VERSION }),
     "/api/auth/register": {
@@ -200,7 +238,9 @@ const server = Bun.serve({
           if (Number(req.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
           const raw = await req.text();
           if (raw.length > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
-          return Response.json(importSubjects(user.id, parseImport(JSON.parse(raw))), { status: 201 });
+          const result = importSubjects(user.id, parseImport(JSON.parse(raw)));
+          libraryChanged(user.id, null);
+          return Response.json(result, { status: 201 });
         } catch (error) {
           return errorResponse(error);
         }
@@ -270,6 +310,54 @@ const server = Bun.serve({
         }
       },
     },
+    "/api/events": (req) => {
+      try {
+        return eventStream(req, requireUser(req).id);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+    "/api/agent/tokens": {
+      GET: (req) => {
+        try {
+          return Response.json(listAgentTokens(requireUser(req).id));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      POST: async (req) => {
+        try {
+          const user = requireUser(req);
+          const input = await body(req);
+          const topic = stringField(input.topic).trim().slice(0, 200);
+          const { token, secret } = createAgentToken(user.id, stringField(input.name) || topic || "Agent");
+          return Response.json({ token, secret, prompt: buildAgentPrompt(publicOrigin(req), secret, topic) }, { status: 201 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/agent/tokens/:id": {
+      DELETE: (req) => {
+        try {
+          revokeAgentToken(requireUser(req).id, req.params.id);
+          return new Response(null, { status: 204 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/agent/spec": (req) => new Response(buildAgentSpec(publicOrigin(req)), { headers: { "Content-Type": "text/plain; charset=utf-8" } }),
+    "/api/agent/library": (req) => agentRoute(req, (auth) => readLibrary(auth.user.id)),
+    "/api/agent/subjects/:id": (req) => agentRoute(req, (auth) => readSubject(auth.user.id, req.params.id)),
+    "/api/agent/progress": (req) => agentRoute(req, (auth) => readProgress(auth.user.id, new URL(req.url).searchParams.get("subjectId") || undefined)),
+    "/api/agent/commits": {
+      POST: (req) => agentRoute(req, async (auth) => commit(auth.user.id, await req.json())),
+    },
+    "/api/agent/reports": {
+      POST: (req) => agentRoute(req, async (auth) => report(auth.user.id, auth.tokenId, await req.json()), 201),
+    },
+    "/mcp": handleMcp,
     "/api/subjects": {
       GET: (req) => {
         try {
@@ -283,17 +371,16 @@ const server = Bun.serve({
           const user = requireUser(req);
           const input = await body(req);
           const color = SUBJECT_COLORS.includes(input.color as SubjectColor) ? (input.color as SubjectColor) : "green";
-          return Response.json(
-            createSubject(
-              user.id,
-              stringField(input.name),
-              stringField(input.description),
-              color,
-              stringField(input.gradientStart) || "#58cc02",
-              stringField(input.gradientEnd) || "#1cb0f6",
-            ),
-            { status: 201 },
+          const subject = createSubject(
+            user.id,
+            stringField(input.name),
+            stringField(input.description),
+            color,
+            stringField(input.gradientStart) || "#58cc02",
+            stringField(input.gradientEnd) || "#1cb0f6",
           );
+          libraryChanged(user.id, subject.id);
+          return Response.json(subject, { status: 201 });
         } catch (error) {
           return errorResponse(error);
         }

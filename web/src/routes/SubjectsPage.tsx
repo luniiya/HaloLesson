@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { IconPlus } from "@tabler/icons-react";
 import type { Subject } from "@halolesson/shared";
 import { api } from "$lib/api";
+import { useLibraryEvents } from "$lib/events";
 import Button from "../components/Button";
 import CreateSubjectForm from "../components/CreateSubjectForm";
 import BookArtwork from "../components/BookArtwork";
@@ -21,6 +22,10 @@ export default function SubjectsPage() {
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load subjects"); });
     return () => { active = false; };
   }, []);
+
+  useLibraryEvents(() => {
+    api<Subject[]>("/api/subjects").then(setSubjects).catch(() => {});
+  });
 
   const skillCount = subjects?.reduce((total, subject) => total + subject.skillCount, 0) ?? 0;
 

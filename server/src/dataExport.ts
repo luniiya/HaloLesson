@@ -12,7 +12,7 @@ import {
 import { db } from "./db";
 import { getSubject } from "./subjects";
 
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+export const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const MAX_SUBJECTS = 100;
 const MAX_EXERCISES = 20_000;
 
@@ -115,18 +115,18 @@ export function buildExport(userId: string, subjectId?: string): ExportFile {
   };
 }
 
-function record(value: unknown, where: string): Record<string, unknown> {
+export function record(value: unknown, where: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${where} must be an object`);
   return value as Record<string, unknown>;
 }
 
-function list(value: unknown, where: string): unknown[] {
+export function list(value: unknown, where: string): unknown[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error(`${where} must be a list`);
   return value;
 }
 
-function text(value: unknown, where: string, max: number, required = false): string {
+export function text(value: unknown, where: string, max: number, required = false): string {
   const result = typeof value === "string" ? value.trim() : "";
   if (required && !result) throw new Error(`${where} is required`);
   if (result.length > max) throw new Error(`${where} must be ${max} characters or fewer`);
@@ -137,7 +137,7 @@ function strings(value: unknown, where: string): string[] {
   return list(value, where).map((item, index) => text(item, `${where} ${index + 1}`, 500, true));
 }
 
-function parseExercise(value: unknown, where: string): ExportExercise {
+export function parseExercise(value: unknown, where: string): ExportExercise {
   const input = record(value, where);
   const prompt = text(input.prompt, `${where} prompt`, 2000, true);
   const explanation = text(input.explanation, `${where} explanation`, 2000);

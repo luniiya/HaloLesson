@@ -186,3 +186,26 @@ export interface ImportResult {
   skillCount: number;
   exerciseCount: number;
 }
+
+// An agent token lets an LLM agent read and edit one user's library over the
+// agent API or MCP. Tokens never expire; users revoke them from Sessions.
+export interface AgentToken {
+  id: string;
+  name: string;
+  hint: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+// Returned once, when the token is created. The secret is never shown again.
+export interface CreatedAgentToken {
+  token: AgentToken;
+  secret: string;
+  prompt: string;
+}
+
+// Pushed over /api/events whenever a user's library changes.
+export interface LibraryEvent {
+  revision: number;
+  subjectId: string | null;
+}

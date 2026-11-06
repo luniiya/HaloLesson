@@ -21,7 +21,7 @@ const USERNAME_RULES = "Username must be 3-32 characters: letters, numbers, ., -
 
 export class ForbiddenError extends Error {}
 
-interface UserRow {
+export interface UserRow {
   id: string;
   username: string;
   email: string | null;
@@ -40,7 +40,7 @@ interface SessionRow {
   last_seen_at: string | null;
 }
 
-function toUser(row: UserRow): User {
+export function toUser(row: UserRow): User {
   return {
     id: row.id,
     username: row.username,
