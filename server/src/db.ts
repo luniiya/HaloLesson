@@ -94,3 +94,38 @@ db.exec(`
 const subjectColumns = db.query<{ name: string }, []>("PRAGMA table_info(subjects)").all().map((column) => column.name);
 if (!subjectColumns.includes("gradient_start")) db.exec("ALTER TABLE subjects ADD COLUMN gradient_start TEXT NOT NULL DEFAULT '#58cc02'");
 if (!subjectColumns.includes("gradient_end")) db.exec("ALTER TABLE subjects ADD COLUMN gradient_end TEXT NOT NULL DEFAULT '#1cb0f6'");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    signup_enabled INTEGER NOT NULL DEFAULT 1,
+    require_strong_passwords INTEGER NOT NULL DEFAULT 1,
+    require_email INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT OR IGNORE INTO settings (id) VALUES (1);
+`);
+
+function columnsOf(table: string): string[] {
+  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((column) => column.name);
+}
+
+const userColumns = columnsOf("users");
+if (!userColumns.includes("avatar")) db.exec("ALTER TABLE users ADD COLUMN avatar TEXT");
+if (!userColumns.includes("is_admin")) db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
+if (!userColumns.includes("username_changed_at")) db.exec("ALTER TABLE users ADD COLUMN username_changed_at TEXT");
+
+// Databases created before admin roles existed: the oldest account becomes admin,
+// matching what a fresh install does for the first registered user.
+const hasAdmin = db.query<{ id: string }, []>("SELECT id FROM users WHERE is_admin = 1 LIMIT 1").get();
+if (!hasAdmin) db.exec("UPDATE users SET is_admin = 1 WHERE id = (SELECT id FROM users ORDER BY created_at LIMIT 1)");
+
+// Sessions get a client-safe id (so the token never leaves the cookie) plus
+// device info for the Sessions settings page.
+const sessionColumns = columnsOf("sessions");
+if (!sessionColumns.includes("id")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN id TEXT");
+  db.exec("UPDATE sessions SET id = lower(hex(randomblob(16))) WHERE id IS NULL");
+}
+if (!sessionColumns.includes("user_agent")) db.exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT");
+if (!sessionColumns.includes("last_seen_at")) db.exec("ALTER TABLE sessions ADD COLUMN last_seen_at TEXT");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id)");

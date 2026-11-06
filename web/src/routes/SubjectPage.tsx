@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { IconArrowLeft, IconCircleDashed, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconCircleDashed, IconShare, IconX } from "@tabler/icons-react";
 import type { Skill, SubjectDetail } from "@halolesson/shared";
 import { api } from "$lib/api";
+import { download } from "$lib/server";
 import SkillPath from "../components/SkillPath";
 
 export default function SubjectPage() {
@@ -28,10 +29,15 @@ export default function SubjectPage() {
   return (
     <div className="mx-auto max-w-4xl px-5 pb-24 pt-8 sm:px-8 md:pb-12">
       <Link to="/" className="inline-flex items-center gap-2 text-sm font-extrabold text-wolf hover:text-owl-deep"><IconArrowLeft size={18} />All subjects</Link>
-      <header className="mt-6 border-b-2 border-swan pb-8">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-owl-deep">Practice path</p>
-        <h1 className="mt-1 text-3xl font-black">{detail.subject.name}</h1>
-        <p className="mt-2 max-w-2xl font-semibold leading-6 text-wolf">{detail.subject.description || "Your skills and practice progress will live here."}</p>
+      <header className="mt-6 flex flex-col gap-5 border-b-2 border-swan pb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-owl-deep">Practice path</p>
+          <h1 className="mt-1 text-3xl font-black">{detail.subject.name}</h1>
+          <p className="mt-2 max-w-2xl font-semibold leading-6 text-wolf">{detail.subject.description || "Your skills and practice progress will live here."}</p>
+        </div>
+        <button type="button" className="button button-secondary shrink-0 gap-2" title="Download this subject as a file anyone can import" onClick={() => download(`/api/subjects/${encodeURIComponent(subjectId)}/export`)}>
+          <IconShare size={19} />Share
+        </button>
       </header>
       {detail.units.length === 0 ? (
         <section className="py-16 text-center">

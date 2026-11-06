@@ -1,8 +1,31 @@
-import { APP_VERSION, SUBJECT_COLORS, type SubjectColor, type User } from "@halolesson/shared";
+import { APP_VERSION, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type Settings, type SubjectColor, type User } from "@halolesson/shared";
 import { resolve, sep } from "node:path";
-import { clearSessionCookie, endSession, login, register, sessionCookie, userFromRequest } from "./auth";
+import {
+  adminCreateUser,
+  adminUpdateUser,
+  clearSessionCookie,
+  deleteOwnAccount,
+  deleteUser,
+  endSession,
+  ForbiddenError,
+  listSessions,
+  listUsers,
+  login,
+  register,
+  revokeOtherSessions,
+  revokeSession,
+  sessionCookie,
+  tokenFromRequest,
+  updateAccount,
+  userCount,
+  userFromRequest,
+} from "./auth";
+import { buildExport, getExportStats, importSubjects, parseImport } from "./dataExport";
 import { getPracticeSession, submitAttempt } from "./practice";
+import { getSettings, updateSettings } from "./settings";
 import { createSubject, getSubject, listSubjects } from "./subjects";
+
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
 class UnauthorizedError extends Error {}
 
@@ -12,11 +35,18 @@ function requireUser(req: Request): User {
   return user;
 }
 
+function requireAdmin(req: Request): User {
+  const user = requireUser(req);
+  if (!user.isAdmin) throw new ForbiddenError("Admins only");
+  return user;
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof UnauthorizedError) return Response.json({ error: "Not signed in" }, { status: 401 });
+  if (error instanceof ForbiddenError) return Response.json({ error: error.message }, { status: 403 });
   if (error instanceof SyntaxError) return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   const message = error instanceof Error ? error.message : "Something went wrong";
-  const status = message === "Subject not found" ? 404 : 400;
+  const status = message.endsWith("not found") ? 404 : 400;
   return Response.json({ error: message }, { status });
 }
 
@@ -28,6 +58,21 @@ async function body(req: Request): Promise<Record<string, unknown>> {
 
 function stringField(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function downloadName(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "subject";
+  return `halolesson-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+}
+
+function jsonDownload(data: unknown, filename: string) {
+  return new Response(JSON.stringify(data, null, 2), {
+    headers: { "Content-Type": "application/json", "Content-Disposition": `attachment; filename="${filename}"` },
+  });
 }
 
 const webRoot = resolve(import.meta.dir, "../../web/dist");
@@ -44,6 +89,7 @@ const server = Bun.serve({
             stringField(input.username),
             stringField(input.password),
             input.email === null ? null : stringField(input.email),
+            req.headers.get("user-agent"),
           );
           return Response.json(user, { status: 201, headers: { "Set-Cookie": sessionCookie(token) } });
         } catch (error) {
@@ -55,7 +101,7 @@ const server = Bun.serve({
       POST: async (req) => {
         try {
           const input = await body(req);
-          const { user, token } = await login(stringField(input.identifier), stringField(input.password));
+          const { user, token } = await login(stringField(input.identifier), stringField(input.password), req.headers.get("user-agent"));
           return Response.json(user, { headers: { "Set-Cookie": sessionCookie(token) } });
         } catch (error) {
           return errorResponse(error);
@@ -71,6 +117,158 @@ const server = Bun.serve({
     "/api/auth/me": (req) => {
       const user = userFromRequest(req);
       return user ? Response.json(user) : Response.json({ error: "Not signed in" }, { status: 401 });
+    },
+    "/api/settings": () => Response.json(getSettings()),
+    "/api/setup-status": () => Response.json({ needsSetup: userCount() === 0 }),
+    "/api/account": {
+      PATCH: async (req) => {
+        try {
+          const user = requireUser(req);
+          const input = await body(req);
+          const avatar = input.avatar === null ? null : optionalString(input.avatar);
+          if (avatar && (avatar.length > MAX_AVATAR_LENGTH || !/^data:image\/(png|jpeg|webp);base64,/.test(avatar))) {
+            throw new Error("Avatar must be a PNG, JPEG or WebP image under 400 KB");
+          }
+          return Response.json(await updateAccount(user.id, tokenFromRequest(req), {
+            username: optionalString(input.username),
+            email: input.email === null ? null : optionalString(input.email),
+            password: optionalString(input.password) || undefined,
+            avatar,
+            currentPassword: optionalString(input.currentPassword),
+          }));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      DELETE: async (req) => {
+        try {
+          const user = requireUser(req);
+          const input = await body(req);
+          await deleteOwnAccount(user.id, stringField(input.currentPassword));
+          return new Response(null, { status: 204, headers: { "Set-Cookie": clearSessionCookie() } });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/account/sessions": {
+      GET: (req) => {
+        try {
+          return Response.json(listSessions(requireUser(req).id, tokenFromRequest(req)));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      DELETE: (req) => {
+        try {
+          revokeOtherSessions(requireUser(req).id, tokenFromRequest(req));
+          return new Response(null, { status: 204 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/account/sessions/:id": {
+      DELETE: (req) => {
+        try {
+          revokeSession(requireUser(req).id, req.params.id);
+          return new Response(null, { status: 204 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/export/stats": (req) => {
+      try {
+        return Response.json(getExportStats(requireUser(req).id));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+    "/api/export": (req) => {
+      try {
+        const user = requireUser(req);
+        return jsonDownload(buildExport(user.id), `halolesson-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+    "/api/import": {
+      POST: async (req) => {
+        try {
+          const user = requireUser(req);
+          if (Number(req.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
+          const raw = await req.text();
+          if (raw.length > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
+          return Response.json(importSubjects(user.id, parseImport(JSON.parse(raw))), { status: 201 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/admin/users": {
+      GET: (req) => {
+        try {
+          requireAdmin(req);
+          return Response.json(listUsers());
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      POST: async (req) => {
+        try {
+          requireAdmin(req);
+          const input = await body(req);
+          const user = await adminCreateUser(
+            stringField(input.username),
+            stringField(input.password),
+            stringField(input.email) || null,
+            input.isAdmin === true,
+          );
+          return Response.json(user, { status: 201 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/admin/users/:id": {
+      PATCH: async (req) => {
+        try {
+          const admin = requireAdmin(req);
+          const input = await body(req);
+          return Response.json(await adminUpdateUser(admin.id, req.params.id, {
+            isAdmin: typeof input.isAdmin === "boolean" ? input.isAdmin : undefined,
+            password: optionalString(input.password) || undefined,
+          }));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+      DELETE: (req) => {
+        try {
+          const admin = requireAdmin(req);
+          if (req.params.id === admin.id) throw new Error("Delete your own account from Account settings");
+          deleteUser(req.params.id);
+          return new Response(null, { status: 204 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/admin/settings": {
+      PATCH: async (req) => {
+        try {
+          requireAdmin(req);
+          const input = await body(req);
+          const updates: Partial<Settings> = {};
+          for (const key of ["signupEnabled", "requireStrongPasswords", "requireEmail"] as const) {
+            if (typeof input[key] === "boolean") updates[key] = input[key];
+          }
+          return Response.json(updateSettings(updates));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
     },
     "/api/subjects": {
       GET: (req) => {
@@ -109,6 +307,14 @@ const server = Bun.serve({
           return errorResponse(error);
         }
       },
+    },
+    "/api/subjects/:id/export": (req) => {
+      try {
+        const file = buildExport(requireUser(req).id, req.params.id);
+        return jsonDownload(file, downloadName(file.subjects[0]!.name));
+      } catch (error) {
+        return errorResponse(error);
+      }
     },
     "/api/skills/:id/practice": (req) => {
       try {

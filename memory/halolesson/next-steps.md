@@ -90,3 +90,9 @@ Related: [[halolesson-vision]], [[user-preferences]]
 - User explicitly requested no ASCII arrows and Tabler icons everywhere interface icons are needed. Installed `@tabler/icons-react@3.50.0` in web.
 - Replaced custom/ad-hoc navigation, subject/skill symbols, arrows, close, plus, sparkle, copy/check, empty-state, and star glyphs. Custom Logo SVG and BookArtwork remain brand illustrations.
 - `bun run check && bun run build` passes; icon/glyph sweep has no remaining matches; bwl screenshot `bwl-tabler-home-v1.png` reviewed.
+
+## Account system port (2026-11-06)
+- Ported recoral's account system, see [[account-system-port]]. New server files `settings.ts`, `dataExport.ts`; `auth.ts` rewritten; web `routes/settings/*` (Account, Sessions, Import & export, admin Users, admin Server), `ConfirmDialog`, `Avatar`, `/setup` route, subject Share button, import box inside Create with AI dialog. Import accepts both `format: "halolesson"` backups and the bare AI `{subject, units}` JSON; always creates new subjects.
+- Verified: `bun run check`, curl smoke test on a temp DB, migration on a copy of real DB (existing `Username` account became admin), bwl: account form, paste import, users page, settings toggle (after disk fix).
+- Not yet browser-checked: Share button, Sessions page, Create with AI import box, mobile layout. Nothing committed yet.
+- Gotcha: `/home` hit 100% full on 2026-11-06 and SQLite failed with "database or disk is full". Check `df -h /home` if writes fail.

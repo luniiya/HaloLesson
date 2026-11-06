@@ -58,6 +58,10 @@
     @apply border-2 border-swan bg-white text-wolf shadow-[0_2px_0_#e5e5e5] hover:bg-eel hover:text-ink active:translate-y-0.5 active:shadow-none;
   }
 
+  .button-danger {
+    @apply bg-cardinal text-white shadow-[0_4px_0_#d33131] hover:bg-[#ff6363] active:translate-y-1 active:shadow-none;
+  }
+
   .button-ghost {
     @apply text-wolf hover:bg-eel hover:text-ink;
   }
@@ -275,6 +279,58 @@
 
   .agent-dialog-card {
     @apply relative max-h-[85dvh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8;
+  }
+
+  .settings-tab {
+    @apply flex shrink-0 items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-extrabold text-wolf transition-colors hover:bg-eel hover:text-ink;
+  }
+
+  .settings-tab-active {
+    @apply bg-blue-50 text-eel-blue hover:bg-blue-50 hover:text-eel-blue;
+  }
+
+  .settings-card {
+    @apply rounded-2xl border-2 border-swan bg-white p-5 sm:p-6;
+  }
+
+  .settings-card-title {
+    @apply text-lg font-black text-ink;
+  }
+
+  .settings-card-hint {
+    @apply mt-1 text-sm font-semibold leading-6 text-wolf;
+  }
+
+  .notice-error {
+    @apply rounded-xl border-2 border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-cardinal;
+  }
+
+  .notice-success {
+    @apply rounded-xl border-2 border-owl-pale bg-[#f2fde9] px-4 py-3 text-sm font-bold text-owl-deep;
+  }
+
+  .toggle {
+    @apply relative inline-flex h-8 w-14 shrink-0 cursor-pointer items-center rounded-full bg-swan transition-colors has-[:checked]:bg-owl has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-eel-blue;
+  }
+
+  .toggle input {
+    @apply absolute inset-0 cursor-pointer opacity-0;
+  }
+
+  .toggle-thumb {
+    @apply pointer-events-none ml-1 size-6 rounded-full bg-white shadow-[0_2px_0_rgba(0,0,0,0.12)] transition-transform;
+  }
+
+  .toggle:has(:checked) .toggle-thumb {
+    @apply translate-x-6;
+  }
+
+  .drop-zone {
+    @apply flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-swan bg-eel/50 px-5 py-8 text-center transition-colors hover:border-eel-blue hover:bg-blue-50/60;
+  }
+
+  .drop-zone-active {
+    @apply border-eel-blue bg-blue-50;
   }
 
   .gradient-control {

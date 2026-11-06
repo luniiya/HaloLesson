@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { MIN_PASSWORD_LENGTH, USERNAME_HTML_PATTERN, validatePassword } from "@halolesson/shared";
 import { useAuth } from "$lib/auth";
+import { useServerInfo } from "$lib/server";
 import Logo from "../components/Logo";
 import Button from "../components/Button";
 import BookArtwork from "../components/BookArtwork";
@@ -10,7 +11,9 @@ export default function AuthPage() {
   const { user, loading, login, register } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const registering = location.pathname === "/register";
+  const info = useServerInfo();
+  const settingUp = location.pathname === "/setup";
+  const registering = settingUp || location.pathname === "/register";
   const [identifier, setIdentifier] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -20,6 +23,11 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && user) return <Navigate to="/" replace />;
+  if (!info) return <div className="grid min-h-dvh place-items-center bg-white font-bold text-wolf">Loading…</div>;
+  if (info.needsSetup && !settingUp) return <Navigate to="/setup" replace />;
+  if (!info.needsSetup && settingUp) return <Navigate to="/login" replace />;
+  const { requireEmail, requireStrongPasswords, signupEnabled } = info.settings;
+  const signupClosed = registering && !settingUp && !signupEnabled;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -29,7 +37,7 @@ export default function AuthPage() {
         setError("Passwords do not match");
         return;
       }
-      const check = validatePassword(password);
+      const check = validatePassword(password, requireStrongPasswords);
       if (!check.valid) {
         setError(check.reason ?? "Invalid password");
         return;
@@ -68,20 +76,28 @@ export default function AuthPage() {
       <section className="flex min-h-dvh items-center justify-center px-5 py-8 sm:px-10 lg:px-12">
         <div className="w-full max-w-[420px]">
           <div className="mb-10 text-center lg:hidden"><Logo /></div>
-          <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-eel-blue">{registering ? "Start your path" : "Good to see you"}</p>
-          <h2 className="text-3xl font-black tracking-tight">{registering ? "Create your learning space" : "Welcome back"}</h2>
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-eel-blue">{settingUp ? "First-time setup" : registering ? "Start your path" : "Good to see you"}</p>
+          <h2 className="text-3xl font-black tracking-tight">{settingUp ? "Create the admin account" : registering ? "Create your learning space" : "Welcome back"}</h2>
           <p className="mb-7 mt-2 text-[15px] font-semibold leading-6 text-wolf">
-            {registering ? "Your subjects, skills, and progress. All in one place." : "Jump back into whatever you want to sharpen."}
+            {settingUp
+              ? "This first account manages the server: who can sign up, and the other accounts."
+              : registering ? "Your subjects, skills, and progress. All in one place." : "Jump back into whatever you want to sharpen."}
           </p>
-          {error && <p role="alert" className="mb-5 rounded-xl border-2 border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-cardinal">{error}</p>}
+          {error && <p role="alert" className="notice-error mb-5">{error}</p>}
+          {signupClosed ? (
+            <div className="flex flex-col gap-4">
+              <p className="notice-error">Sign ups are closed on this server. Ask the admin to create an account for you.</p>
+              <Link to="/login" className="button button-secondary w-full">Back to log in</Link>
+            </div>
+          ) : (
           <form onSubmit={submit} className="flex flex-col gap-4">
             {registering ? (
               <>
                 <label className="form-label">Username
                   <input className="form-input" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" minLength={3} maxLength={32} pattern={USERNAME_HTML_PATTERN} placeholder="How should we call you?" required autoFocus />
                 </label>
-                <label className="form-label">Email <span className="font-semibold text-hare">(optional)</span>
-                  <input type="email" className="form-input" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" />
+                <label className="form-label"><span>Email {!requireEmail && <span className="font-semibold text-hare">(optional)</span>}</span>
+                  <input type="email" className="form-input" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" required={requireEmail} />
                 </label>
               </>
             ) : (
@@ -90,20 +106,23 @@ export default function AuthPage() {
               </label>
             )}
             <label className="form-label">Password
-              <input type="password" className="form-input" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={registering ? "new-password" : "current-password"} minLength={registering ? MIN_PASSWORD_LENGTH : undefined} placeholder={registering ? "At least 8 characters" : "Your password"} required />
+              <input type="password" className="form-input" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={registering ? "new-password" : "current-password"} minLength={registering && requireStrongPasswords ? MIN_PASSWORD_LENGTH : undefined} placeholder={registering ? (requireStrongPasswords ? "At least 8 characters" : "Choose a password") : "Your password"} required />
             </label>
             {registering && (
               <label className="form-label">Confirm password
-                <input type="password" className="form-input" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} placeholder="One more time" required />
+                <input type="password" className="form-input" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" placeholder="One more time" required />
               </label>
             )}
             <Button type="submit" className="mt-3 w-full" disabled={submitting}>
-              {submitting ? "Please wait…" : registering ? "Create account" : "Log in"}
+              {submitting ? "Please wait…" : settingUp ? "Create admin account" : registering ? "Create account" : "Log in"}
             </Button>
-            <Link to={registering ? "/login" : "/register"} className="button button-secondary mt-1 w-full">
-              {registering ? "I already have an account" : "New to haloLesson"}
-            </Link>
+            {!settingUp && (registering || signupEnabled) && (
+              <Link to={registering ? "/login" : "/register"} className="button button-secondary mt-1 w-full">
+                {registering ? "I already have an account" : "New to haloLesson"}
+              </Link>
+            )}
           </form>
+          )}
           <p className="mt-7 text-center text-xs font-semibold leading-5 text-wolf">No daily due pile. No pointless quizzes.<br />Just the practice you choose.</p>
         </div>
       </section>
