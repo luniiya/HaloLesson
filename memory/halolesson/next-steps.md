@@ -112,3 +112,12 @@ Built skill tiers, hearts, medals and the FSRS recommender. Details are in [[ski
 
 ## 2026-11-07: LaTeX and the start flag
 Built LaTeX rendering ([[latex-math]]) and the start flag node ([[start-flag]]). 95 server tests pass and the web build passes. Nothing is visually checked yet. Next: more answer types (typed, matching pairs; no voice), then procedural generators once the user explains them.
+
+## 2026-11-07: test data adapted to tiers, links and the start flag
+User asked to bring "the test data / levels we created for testing" up to the current architecture (it predated links, tiers, concepts and the start flag). *(as of 2026-11-07)*
+- `server/scripts/seedGraph.ts` now gives every skill 8 exercises in each of the four tiers (Easy to Expert, Expert is multiplication) with a concept tag, so seeded maps are unlockable under the new default unlockTier hard. Smoke-tested on a throwaway DB: all skills had all four tiers.
+- The dev DB here (`data/halolesson.sqlite`) has no `luniiya` account and no Map of Mathematics, only users `Username`, `test` and `orbittest27610`. The Map of Mathematics probably lives on the user's other PC (they use two machines), so re-run `bun run seed:graph <username>` there, or ask.
+- Ran a one-off adapter (not in the repo) on account `test`: split each skill's 551 exercises into 4 tiers by written order, set the skill title as the only concept, chained skills into maps with the start flag on the first skill. Music theory already had hand-made links and 3 start skills, so its links were left alone (tiers still applied). Settings unchanged (unlock_in_order 0, unlock_tier easy), since existing subjects keep their stored values.
+- Still missing a tier: 2 skills with no exercises, and 3 skills with only 3 to 4 exercises (Japanese kana, Algebra, Organic chemistry).
+- Backup from before the change: scratchpad `halolesson-before-adapt.sqlite` (session-only).
+- Found but not touched (user said not the tests): `server/test/data/roundtrip.test.ts` imports `submitAttempt` from `src/practice` (it now lives in `test/practice-helper.ts`) and reads `skill.stars` (field is gone), so `bun run test` and `bun run check` fail on it. Other 89 tests pass.

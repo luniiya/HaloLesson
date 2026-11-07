@@ -1,12 +1,13 @@
 // Dev tool: fills an account with a test subject to try the skill map.
 // By default it's a small map of mathematics (real skills and prerequisite
 // links); --random N makes N random skills instead, to stress the layout.
-// Every skill gets a few arithmetic exercises so practice (and unlocking) works.
+// Every skill gets arithmetic exercises in all four tiers so practice (and unlocking) works.
 //
 //   bun run seed:graph <username> [--random N] [--unlock]
 import { db } from "../src/db";
 import { createRegion, createSkill, linkSkills } from "../src/skillGraph";
 import { createSubject } from "../src/subjects";
+import { TIERS } from "@halolesson/shared";
 import { MATHS_MAP } from "./mathsMap";
 
 const argv = process.argv.slice(2);
@@ -24,18 +25,33 @@ if (!user) {
   process.exit(1);
 }
 
+// Every skill gets a pool in all four tiers (the rule for real skills too), each
+// with a concept tag so the recommender and insight have something to track.
+// Harder tiers use bigger numbers, and Expert switches to multiplication.
+const TIER_RANGES = [10, 40, 400, 99] as const;
+const EXERCISES_PER_TIER = 8;
+
 function addExercises(skillId: string) {
   const now = new Date().toISOString();
-  for (let exercise = 0; exercise < 3; exercise += 1) {
-    const a = 2 + Math.floor(Math.random() * 20);
-    const b = 2 + Math.floor(Math.random() * 20);
-    const options = [a + b + 1, a + b - 1, a * b].map(String);
-    const correctIndex = Math.floor(Math.random() * 4);
-    options.splice(correctIndex, 0, String(a + b));
-    db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, created_at) VALUES (?, ?, 'multiple_choice', ?, ?, ?, ?, ?)", [
-      crypto.randomUUID(), skillId, `What is ${a} + ${b}?`, JSON.stringify({ options, correctIndex }), `${a} + ${b} = ${a + b}.`, exercise, now,
-    ]);
-  }
+  const insert = db.prepare("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, tier, concepts_json, position, created_at) VALUES (?, ?, 'multiple_choice', ?, ?, ?, ?, ?, ?, ?)");
+  db.transaction(() => {
+    TIERS.forEach((_, tier) => {
+      const times = tier === 3;
+      for (let exercise = 0; exercise < EXERCISES_PER_TIER; exercise += 1) {
+        const a = 2 + Math.floor(Math.random() * TIER_RANGES[tier]!);
+        const b = 2 + Math.floor(Math.random() * TIER_RANGES[tier]!);
+        const answer = times ? a * b : a + b;
+        const options = [answer + 1, answer - 1, times ? a + b : a * b].map(String);
+        const correctIndex = Math.floor(Math.random() * 4);
+        options.splice(correctIndex, 0, String(answer));
+        const sign = times ? "×" : "+";
+        insert.run(
+          crypto.randomUUID(), skillId, `What is ${a} ${sign} ${b}?`, JSON.stringify({ options, correctIndex }), `${a} ${sign} ${b} = ${answer}.`,
+          tier, JSON.stringify([times ? "multiplication" : "addition"]), tier * EXERCISES_PER_TIER + exercise, now,
+        );
+      }
+    });
+  })();
 }
 
 if (!count) {

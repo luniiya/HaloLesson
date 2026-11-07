@@ -20,3 +20,6 @@ type: project
 Related: [[halolesson-vision]]
 
 - **"dingcad" resolved** *(as of 2026-11-06)*: it's github.com/yacineMTB/dingcad, a live-reload CAD tool that replaces OpenSCAD. You write `scene.js` (and can import assembly modules) using a small JS API documented in a one-page `API.md` cheat sheet. A raylib viewer polls the mtimes of the scene and its dependencies, then reloads. It's built for LLMs: "no docs, read the code", and an agent edits plain files while the human watches the result live. A shallow clone is at `~/ram/dingcad` (tmpfs, gone on reboot). See [[halolesson-next-steps]].
+
+- **Deployment, name and mascot resolved** *(as of 2026-11-07)*: it runs wherever the user wants (self-hosted); a public hosted instance is undecided. "haloLesson" is the final name and the 3D book is the final mascot. The logo might still change.
+- **License** *(as of 2026-11-07)*: undecided between AGPL-3.0 and Apache-2.0; the user asked for a recommendation (I recommended AGPL-3.0).

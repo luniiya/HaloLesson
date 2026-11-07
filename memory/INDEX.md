@@ -41,3 +41,4 @@
 - [Recommender research](halolesson/recommender-research.md) — FSRS, Duolingo HLR, Elo, misconception tagging, QuickJS sandbox for generators
 - [LaTeX math](halolesson/latex-math.md) — KaTeX, trust off, $…$ / $$…$$ in exercise text; agents told in prompt/spec/MCP
 - [Start flag](halolesson/start-flag.md) — start is a flag node linked to start skills via id "start", subject accent color, halo shading
+- [Book artwork WebGL](halolesson/book-artwork-webgl.md) — spinning book is three.js (book3d.ts, lazy chunk); halo/base still flat CSS
