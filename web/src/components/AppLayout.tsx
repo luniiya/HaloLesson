@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router";
-import { IconArchive, IconBook2, IconChartBar, IconSettings, IconSparkles, IconTrash } from "@tabler/icons-react";
+import { IconArchive, IconBook2, IconChartBar, IconSparkles, IconTrash } from "@tabler/icons-react";
 import { useAuth } from "$lib/auth";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
@@ -71,10 +71,6 @@ export default function AppLayout() {
           </NavLink>
         </nav>
         <div className="mt-auto flex flex-col gap-2 border-t-2 border-swan pt-4">
-          <NavLink to="/settings" className={navClass}>
-            <IconSettings className="size-6" aria-hidden="true" />
-            Settings
-          </NavLink>
           <Link to="/settings" className="flex items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-eel">
             <Avatar user={user} />
             <div className="min-w-0">

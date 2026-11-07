@@ -2,7 +2,7 @@
 
 ## halolesson
 - [haloLesson vision](halolesson/vision.md) — Duolingo-style hot-recall engine; user-created lessons; React+Bun; shell first, then UI
-- [haloLesson next steps](halolesson/next-steps.md) — READ FIRST after /clear: status (nothing built), agreed plan, how to resume
+- [haloLesson next steps](halolesson/next-steps.md) — READ FIRST after /clear: latest status at the bottom (2026-11-07: stats, .halolesson export, skill map built, uncommitted)
 - [haloLesson open questions](halolesson/open-questions.md) — deferred vision details to ask the user later
 - [recoral reference](halolesson/recoral-reference.md) — ../recoral = stack+auth donor: Bun monorepo, bun:sqlite, hand-rolled cookie auth, React 19/Vite/Tailwind 4
 - [Development environment](halolesson/development-environment.md) — port 7270 is open for bwl UI testing; API uses 7246

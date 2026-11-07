@@ -7,8 +7,8 @@ import { LEVEL_LABELS, MAX_LEVEL, MAX_LINKS_PER_SKILL, MAX_NOTES_LENGTH, SUBJECT
 export function buildAgentPrompt(origin: string, secret: string, topic: string): string {
   const mcpUrl = `${origin}/mcp`;
   const goal = topic
-    ? `I want to practice: ${topic}. Start building it right away.`
-    : "If I have described what I want to practice, start building it. Otherwise ask me what to make and wait for my answer before editing.";
+    ? `I want to practice: ${topic}. Connect and save the token (below), then start building it right away.`
+    : "Right now, only connect, save the token and do \"Remember this\" (all below). Then ask me what I want to practice and wait for my answer. Don't create or change anything in haloLesson until I name a topic in this chat: don't pick one yourself, not even from notes or files you can see.";
   return `# haloLesson: build lessons in my account
 
 Help me build practice in haloLesson, my self-hosted Duolingo-style learning app. A subject is a map of skills: units are its regions, skills sit in regions and link to related skills (any number, in any region), and a skill has exercises (multiple choice or free text) that I practice until I master it. You read and edit my library directly; everything you save shows up live in my open browser.

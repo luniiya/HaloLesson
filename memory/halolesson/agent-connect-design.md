@@ -45,3 +45,7 @@ Revised plan: one shared ops core, with two front doors.
 - Claude Code auto mode blocks an agent writing the token to ~/.config/halolesson/token (it's flagged as credential leakage). The `claude mcp add` path is the one that works for Claude Code.
 
 *(as of 2026-11-07)* MCP tools renamed `halo_*` → `hl_*` (user: "halo is too general"). Older notes mentioning `halo_*` mean `hl_*` now.
+
+## Topic-less prompt *(as of 2026-11-07)*
+- Bug from user testing: with no topic, the prompt said "If I have described what I want to practice, start building it". An agent read the Java notes in its project as that description and built a subject nobody asked for.
+- Fix: the no-topic prompt now says to only connect, save the token and do "Remember this", then ask and wait. Nothing gets created until the user names a topic in chat, and the agent must not pick one from notes or files. Tested in `server/test/agent/prompt.test.ts`.

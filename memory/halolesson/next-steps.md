@@ -96,3 +96,13 @@ Related: [[halolesson-vision]], [[user-preferences]]
 - Verified: `bun run check`, curl smoke test on a temp DB, migration on a copy of real DB (existing `Username` account became admin), bwl: account form, paste import, users page, settings toggle (after disk fix).
 - Not yet browser-checked: Share button, Sessions page, Create with AI import box, mobile layout. Nothing committed yet.
 - Gotcha: `/home` hit 100% full on 2026-11-06 and SQLite failed with "database or disk is full". Check `df -h /home` if writes fail.
+
+## Status *(as of 2026-11-07, before /clear)*
+All uncommitted in the working tree (user manages git). Built this session:
+- Statistics tab, PWA, `/agent` and `/account` pages, mobile nav (Learn, Stats, Account). See [[statistics]], [[pwa]], [[agent-tab]].
+- Export v2: `.halolesson` zip files, re-import asks update or copy, preview and pick. See [[export-format-v2]].
+- Skill map: full-page 2D map, server-side layout, edit mode, unlock in order, y squashed by `MAP_Y_SCALE` 0.72 for a tilted look. See [[skill-graph-vision]].
+- MCP tools renamed to `hl_*`. The sidebar Settings button is gone (the avatar opens Settings).
+- On user `luniiya`: a "Map of Mathematics" seed plus 3 older random test maps (the user hasn't said whether to trash them).
+- Next: the user is testing in a real-world scenario. Tracker milestones are parked for later.
+- Nothing was visually checked by me; the user does the visual testing.
