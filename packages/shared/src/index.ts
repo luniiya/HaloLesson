@@ -268,7 +268,14 @@ export interface SubjectDetail {
   units: Array<Unit & { skills: Skill[] }>;
   // Links between skills, no direction. Each pair appears once.
   links: Array<[string, string]>;
+  // Where the start flag sits on the map (null while there are no skills). It
+  // links to the start skills (skill.start), or to the first skill when none is marked.
+  start: { x: number; y: number } | null;
 }
+
+// The id of a subject's start flag in links: linking a skill to it makes the
+// skill a start skill, unlinking makes it a normal one.
+export const START_NODE = "start";
 
 // Rough distance between linked skills on the map.
 export const MAP_SPACING = 230;
@@ -304,6 +311,11 @@ export function medalFor(expertClearedAt: string | null, now = Date.now()): Meda
   const days = (now - Date.parse(expertClearedAt)) / 86_400_000;
   return days >= MEDAL_COPPER_DAYS ? "copper" : days >= MEDAL_SILVER_DAYS ? "silver" : "gold";
 }
+
+// New subjects unlock their skills in order, and a skill counts as finished
+// once it has cleared Hard.
+export const DEFAULT_UNLOCK_IN_ORDER = true;
+export const DEFAULT_UNLOCK_TIER: Tier = "hard";
 
 // A skill is finished (and opens the skills linked to it) once it has cleared
 // the subject's unlock tier, Easy by default.

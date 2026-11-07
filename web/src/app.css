@@ -544,6 +544,11 @@
     background: rgb(255 255 255 / 30%);
   }
 
+  /* KaTeX: display math gets its own line and scrolls sideways when too wide. */
+  .math-display {
+    @apply my-2 block overflow-x-auto overflow-y-hidden;
+  }
+
   .practice-hearts {
     @apply flex items-center gap-1 text-lg font-black text-cardinal;
   }
@@ -1221,9 +1226,34 @@
   .skill-map-linking .map-node { @apply cursor-crosshair; }
   .map-node-linked .level-ring { @apply outline-dashed outline-3 outline-offset-4 outline-secondary; }
   .skill-node-locked .skill-node-title { @apply text-hare; }
-  .skill-start {
-    @apply absolute -top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-lg bg-surface px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-accent-deep shadow-[0_2px_0_var(--color-swan)] ring-2 ring-swan;
+  .skill-map-link-implicit { stroke-dasharray: 2 16; }
+  /* The start flag: the foot of its pole is its point on the map (FLAG_ANCHOR). */
+  .start-flag {
+    @apply absolute flex w-24 -translate-x-1/2 flex-col items-center text-center outline-none;
   }
+  .start-flag svg {
+    @apply w-[5.5rem] overflow-visible;
+    transition: filter 120ms ease;
+  }
+  /* The pole stays planted; hovering waves the cloth from the pole instead. */
+  .start-flag:hover svg { filter: brightness(1.07); }
+  .start-flag-cloth { transform-box: fill-box; transform-origin: left center; }
+  .start-flag:hover .start-flag-cloth { animation: flag-wave 900ms ease-in-out infinite; }
+  @keyframes flag-wave {
+    0%, 100% { transform: none; }
+    25% { transform: skewY(-5deg) scaleX(0.93); }
+    50% { transform: skewY(2deg) scaleX(1.02); }
+    75% { transform: skewY(-2deg) scaleX(0.97); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .start-flag:hover .start-flag-cloth { animation: none; }
+  }
+  .start-flag .skill-node-title { @apply mt-1; }
+  .start-flag-ring { fill: none; stroke: transparent; stroke-width: 4; }
+  .start-flag[aria-pressed="true"] .start-flag-ring { stroke: var(--color-secondary); }
+  .start-flag-linked .start-flag-ring { stroke: var(--color-secondary); stroke-dasharray: 7 6; }
+  .start-flag:focus-visible .start-flag-ring { stroke: var(--color-secondary); }
+  .skill-map-linking .start-flag { @apply cursor-crosshair; }
   .skill-map-zoom {
     @apply absolute right-3 z-20 flex flex-col overflow-hidden rounded-2xl border-2 border-swan bg-surface shadow-[0_3px_0_var(--color-swan)];
   }

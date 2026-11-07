@@ -39,3 +39,5 @@
 - [Skill graph vision](halolesson/skill-graph-vision.md) — subject page = 2D skill graph like the Map of Mathematics; server-side layout; prereq lock setting; edit mode
 - [Skill levels vision](halolesson/skill-levels-vision.md) — 4 tiers, hearts, gold/silver/copper decay, procedural generators, recommender, retry wrong answers
 - [Recommender research](halolesson/recommender-research.md) — FSRS, Duolingo HLR, Elo, misconception tagging, QuickJS sandbox for generators
+- [LaTeX math](halolesson/latex-math.md) — KaTeX, trust off, $…$ / $$…$$ in exercise text; agents told in prompt/spec/MCP
+- [Start flag](halolesson/start-flag.md) — start is a flag node linked to start skills via id "start", subject accent color, halo shading

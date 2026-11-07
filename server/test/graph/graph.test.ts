@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAP_SPACING, MAP_Y_SCALE } from "@halolesson/shared";
+import { MAP_SPACING, MAP_Y_SCALE, START_NODE } from "@halolesson/shared";
 import { AgentError, commit, readSubject } from "../../src/agent/ops";
 import { buildExport, importSubjects, parseImport } from "../../src/dataExport";
 import { db } from "../../src/db";
@@ -120,11 +120,52 @@ describe("layout", () => {
   });
 });
 
+describe("start flag", () => {
+  test("the flag sits on the map beside the skills and moves with the start skills", () => {
+    const user = makeUser();
+    const subjectId = subjectFor(user.id);
+    expect(getSubject(user.id, subjectId).start).toBeNull();
+    const a = createSkill(user.id, subjectId, { title: "Counting" }).id;
+    const b = createSkill(user.id, subjectId, { title: "Adding", linkTo: [a] }).id;
+    const c = createSkill(user.id, subjectId, { title: "Multiplying", linkTo: [b] }).id;
+    const near = (skillId: string) => {
+      const { start, units } = getSubject(user.id, subjectId);
+      const skills = units.flatMap((unit) => unit.skills);
+      const gaps = skills.map((skill) => Math.hypot(skill.x! - start!.x, (skill.y! - start!.y) * MAP_Y_SCALE));
+      for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(MAP_SPACING * 0.94);
+      return gaps[skills.findIndex((skill) => skill.id === skillId)]! === Math.min(...gaps);
+    };
+    // No start skill marked: the flag links to the first skill.
+    expect(near(a)).toBe(true);
+    linkSkills(user.id, START_NODE, c);
+    expect(skillsOf(user.id, subjectId).filter((skill) => skill.start).map((skill) => skill.id)).toEqual([c]);
+    expect(near(c)).toBe(true);
+    unlinkSkills(user.id, c, START_NODE);
+    expect(skillsOf(user.id, subjectId).some((skill) => skill.start)).toBe(false);
+    expect(() => linkSkills(user.id, START_NODE, START_NODE)).toThrow("to a skill");
+    expect(() => linkSkills(makeUser().id, START_NODE, a)).toThrow("Skill not found");
+  });
+
+  test("agents link skills to the flag with the \"start\" id", () => {
+    const user = makeUser();
+    const subjectId = run(user.id, { op: "putSubject", subject: { name: "Maths" } }).id as string;
+    const unitId = run(user.id, { op: "putUnit", unit: { subjectId, title: "Basics" } }).id as string;
+    const a = run(user.id, { op: "putSkill", skill: { unitId, title: "Counting" } }).id as string;
+    run(user.id, { op: "linkSkills", a: "start", b: a });
+    expect(readSubject(user.id, subjectId).units[0]!.skills[0]!.start).toBe(true);
+    run(user.id, { op: "unlinkSkills", a, b: "start" });
+    expect(readSubject(user.id, subjectId).units[0]!.skills[0]!.start).toBe(false);
+  });
+});
+
 describe("unlock in order", () => {
   test("start skills are open, and finishing a skill opens its links", () => {
     const { user, subjectId, a, b, c, d } = chain();
+    // New subjects unlock in order, finishing a skill at Hard.
+    expect(getSubject(user.id, subjectId).subject).toMatchObject({ unlockInOrder: true, unlockTier: "hard" });
+    updateSubject(user.id, subjectId, { unlockInOrder: false });
     expect(skillsOf(user.id, subjectId).some((skill) => skill.locked)).toBe(false);
-    updateSubject(user.id, subjectId, { unlockInOrder: true });
+    updateSubject(user.id, subjectId, { unlockInOrder: true, unlockTier: "easy" });
     const locked = () => skillsOf(user.id, subjectId).filter((skill) => skill.locked).map((skill) => skill.id).sort();
     // No start marked: the first skill is the start.
     expect(locked()).toEqual([b, c, d].sort());

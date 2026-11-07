@@ -1,4 +1,4 @@
-import { isSubjectIcon, isSubjectType, isTier, medalFor, TIERS, type Tier, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
+import { DEFAULT_UNLOCK_IN_ORDER, DEFAULT_UNLOCK_TIER, isSubjectIcon, isSubjectType, isTier, medalFor, TIERS, type Tier, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
 import { buildExport, checkImportOptions, HEX_COLOR, importSubjects, list, parseExercise, parseImport, previewImport, record, text, type ParsedImport } from "../dataExport";
 import { readUpload } from "../halolessonFile";
 import { db } from "../db";
@@ -361,9 +361,9 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   const level = input.level === undefined ? (current?.level ?? null) : checkLevel(input.level);
   const notes = input.notes === undefined && current ? current.notes : text(input.notes ?? "", "subject.notes", MAX_NOTES_LENGTH);
   if (input.unlockInOrder !== undefined && typeof input.unlockInOrder !== "boolean") throw new AgentError("subject.unlockInOrder must be true or false", 400, "INVALID");
-  const unlockInOrder = input.unlockInOrder === undefined ? current?.unlock_in_order === 1 : input.unlockInOrder;
+  const unlockInOrder = input.unlockInOrder === undefined ? (current ? current.unlock_in_order === 1 : DEFAULT_UNLOCK_IN_ORDER) : input.unlockInOrder;
   if (input.unlockTier !== undefined && !isTier(input.unlockTier)) throw new AgentError(`subject.unlockTier must be one of ${TIERS.join(", ")}`, 400, "INVALID");
-  const unlockTier = input.unlockTier === undefined ? (current?.unlock_tier ?? 0) : TIERS.indexOf(input.unlockTier as Tier);
+  const unlockTier = TIERS.indexOf(input.unlockTier === undefined ? (current ? TIERS[current.unlock_tier]! : DEFAULT_UNLOCK_TIER) : (input.unlockTier as Tier));
   // folderId moves the subject into a folder (null: top level); position is its index among that folder's items.
   const folderId = input.folderId === undefined ? undefined : input.folderId === null ? null : requiredId(input.folderId, "subject.folderId");
   const index = position(input.position);

@@ -5,6 +5,7 @@ import { TIER_LABELS, TIERS, type AttemptResult, type PracticeSession } from "@h
 import { api } from "$lib/api";
 import { isMuted, play, setMuted } from "$lib/sounds";
 import Button from "../components/Button";
+import MathText from "../components/MathText";
 import { MEDAL_COLORS } from "../components/SkillNode";
 
 // One session on one tier of a skill (?tier=, else the next tier to clear).
@@ -95,7 +96,7 @@ export default function PracticePage() {
       ) : current && (
         <main className="practice-main">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-accent-deep">{session.subjectName} · {session.skillTitle} · {tierLabel}</p>
-          <h1 className="mt-3 text-2xl font-black leading-tight sm:text-3xl">{current.prompt}</h1>
+          <h1 className="mt-3 text-2xl font-black leading-tight sm:text-3xl"><MathText text={current.prompt} /></h1>
           <form onSubmit={checkAnswer} className="mt-8">
             {current.type === "multiple_choice" ? (
               <div className="grid gap-3" role="radiogroup" aria-label="Answer choices">
@@ -103,7 +104,7 @@ export default function PracticePage() {
                   <label key={optionIndex} className={`practice-option ${answer === optionIndex ? "practice-option-selected" : ""}`}>
                     <input type="radio" name="answer" checked={answer === optionIndex} onChange={() => setAnswer(optionIndex)} disabled={Boolean(result)} className="sr-only" />
                     <span className="grid size-8 shrink-0 place-items-center rounded-lg border-2 border-swan text-xs font-black">{String.fromCharCode(65 + optionIndex)}</span>
-                    <span>{option}</span>
+                    <span><MathText text={option} /></span>
                   </label>
                 ))}
               </div>
@@ -117,8 +118,8 @@ export default function PracticePage() {
             <section className={`practice-feedback ${result.correct ? "practice-feedback-correct" : "practice-feedback-wrong"}`} aria-live="polite">
               <div className="flex-1">
                 <h2 className="text-xl font-black">{result.correct ? "Exactly right!" : result.session.status === "failed" ? "Out of hearts" : "Not quite yet"}</h2>
-                {!result.correct && <p className="mt-1 text-sm font-bold">Correct answer: {result.correctAnswer}</p>}
-                {result.explanation && <p className="mt-2 text-sm font-semibold leading-6">{result.explanation}</p>}
+                {!result.correct && <p className="mt-1 text-sm font-bold">Correct answer: <MathText text={result.correctAnswer} /></p>}
+                {result.explanation && <p className="mt-2 whitespace-pre-line text-sm font-semibold leading-6"><MathText text={result.explanation} /></p>}
                 {result.requeued && <p className="mt-2 text-xs font-black uppercase tracking-wider">This one comes back at the end</p>}
               </div>
               <Button onClick={next} variant={result.correct ? "primary" : "secondary"} className="shrink-0" autoFocus>{result.session.status === "active" ? "Continue" : "Finish"}</Button>

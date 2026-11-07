@@ -109,3 +109,6 @@ All uncommitted in the working tree (user manages git). Built this session:
 
 ## 2026-11-07: skill tiers
 Built skill tiers, hearts, medals and the FSRS recommender. Details are in [[skill-levels-vision]] under "Built". Next: the start flag (waiting on the user's screenshot), more answer types, then procedural generators.
+
+## 2026-11-07: LaTeX and the start flag
+Built LaTeX rendering ([[latex-math]]) and the start flag node ([[start-flag]]). 95 server tests pass and the web build passes. Nothing is visually checked yet. Next: more answer types (typed, matching pairs; no voice), then procedural generators once the user explains them.

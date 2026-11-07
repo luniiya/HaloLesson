@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { IconLink, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
-import { MAX_HEARTS, MAX_SESSION_SIZE, TIER_LABELS, TIERS, type Skill, type SubjectDetail } from "@halolesson/shared";
+import { MAX_HEARTS, MAX_SESSION_SIZE, START_NODE, TIER_LABELS, TIERS, type Skill, type SubjectDetail } from "@halolesson/shared";
 import { api } from "$lib/api";
 import Button from "./Button";
 import { regionColors } from "./SkillMap";
-import UnlockInOrderToggle from "./UnlockInOrderToggle";
 
 type MapWrite = { id?: string; detail: SubjectDetail };
 
@@ -14,10 +13,12 @@ function write(path: string, method: string, body?: object) {
 }
 
 // Edit mode beside the map: add skills and regions, rename, move between
-// regions, mark start skills, link and delete. Writing exercises stays with agents.
-export default function MapEditor({ detail, selected, linkMode, onDetail, onSelect, onLinkMode }: {
+// regions, link skills to each other and to the start flag, and delete.
+// Writing exercises stays with agents.
+export default function MapEditor({ detail, selected, flagSelected, linkMode, onDetail, onSelect, onLinkMode }: {
   detail: SubjectDetail;
   selected: Skill | null;
+  flagSelected: boolean;
   linkMode: boolean;
   onDetail: (detail: SubjectDetail) => void;
   onSelect: (skillId: string | null) => void;
@@ -40,13 +41,6 @@ export default function MapEditor({ detail, selected, linkMode, onDetail, onSele
   }
 
   const subjectId = detail.subject.id;
-  function patchSubject(fields: object) {
-    setError("");
-    busy.wrap(api(`/api/subjects/${subjectId}`, { method: "PATCH", body: JSON.stringify(fields) }))
-      .then(() => api<SubjectDetail>(`/api/subjects/${subjectId}`))
-      .then(onDetail)
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "That didn't work"));
-  }
 
   return (
     <aside className="flex flex-col gap-4" aria-label="Edit map">
@@ -55,13 +49,6 @@ export default function MapEditor({ detail, selected, linkMode, onDetail, onSele
           <Button className="flex-1 gap-2" onClick={() => setAdding(true)}><IconPlus size={18} />Add skill</Button>
           <Button variant="secondary" className="flex-1 gap-2" onClick={() => void run(`/api/subjects/${subjectId}/regions`, "POST", { title: `Region ${detail.units.length + 1}` })}><IconPlus size={18} />Add region</Button>
         </div>
-        <UnlockInOrderToggle
-          checked={detail.subject.unlockInOrder}
-          tier={detail.subject.unlockTier}
-          disabled={busy.on}
-          onChange={(unlockInOrder) => patchSubject({ unlockInOrder })}
-          onTierChange={(unlockTier) => patchSubject({ unlockTier })}
-        />
         {error && <p role="alert" className="notice-error">{error}</p>}
       </div>
 
@@ -90,6 +77,8 @@ export default function MapEditor({ detail, selected, linkMode, onDetail, onSele
           onClose={() => onSelect(null)}
           run={run}
         />
+      ) : flagSelected ? (
+        <FlagEditor detail={detail} linkMode={linkMode} onLinkMode={onLinkMode} onClose={() => onSelect(null)} run={run} />
       ) : (
         <Regions detail={detail} run={run} />
       )}
@@ -172,7 +161,8 @@ function SkillEditor({ detail, skill, linkMode, onLinkMode, onClose, run }: {
   const [confirming, setConfirming] = useState(false);
   const dirty = title.trim() !== skill.title || description.trim() !== skill.description;
   const titles = new Map(detail.units.flatMap((unit) => unit.skills).map((other) => [other.id, other.title]));
-  const links = detail.links.flatMap(([a, b]) => (a === skill.id ? [b] : b === skill.id ? [a] : []));
+  titles.set(START_NODE, "Start flag");
+  const links = [...(skill.start ? [START_NODE] : []), ...detail.links.flatMap(([a, b]) => (a === skill.id ? [b] : b === skill.id ? [a] : []))];
   const patch = (fields: object) => run(`/api/skills/${skill.id}`, "PATCH", fields);
 
   return (
@@ -187,13 +177,6 @@ function SkillEditor({ detail, skill, linkMode, onLinkMode, onClose, run }: {
         {dirty && <Button type="submit" disabled={!title.trim()}>Save</Button>}
       </form>
       <RegionSelect detail={detail} value={skill.unitId} onChange={(unitId) => void patch({ unitId })} />
-      <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-eel p-3">
-        <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-[var(--color-secondary)]" checked={skill.start} onChange={(event) => void patch({ start: event.target.checked })} />
-        <span>
-          <span className="block text-sm font-extrabold text-ink">Start skill</span>
-          <span className="block text-xs font-semibold leading-5 text-wolf">Where learning begins. Without one, the first skill is the start.</span>
-        </span>
-      </label>
       <div className="grid grid-cols-2 gap-3">
         <SettingInput label="Questions per session" value={skill.sessionSize} max={MAX_SESSION_SIZE} onSave={(sessionSize) => void patch({ sessionSize })} />
         <SettingInput label="Hearts" value={skill.hearts} max={MAX_HEARTS} onSave={(hearts) => void patch({ hearts })} />
@@ -215,7 +198,7 @@ function SkillEditor({ detail, skill, linkMode, onLinkMode, onClose, run }: {
         <Button variant={linkMode ? "primary" : "secondary"} className="mt-3 w-full gap-2" onClick={() => onLinkMode(!linkMode)} aria-pressed={linkMode}>
           <IconLink size={18} />{linkMode ? "Done linking" : "Link skills"}
         </Button>
-        {linkMode && <p className="mt-2 text-xs font-semibold leading-5 text-wolf">Click skills on the map to link them to {skill.title}. Click a linked one again to unlink it.</p>}
+        {linkMode && <p className="mt-2 text-xs font-semibold leading-5 text-wolf">Click skills on the map to link them to {skill.title}. Click a linked one again to unlink it. Link it to the start flag to make it a start skill.</p>}
       </div>
 
       {confirming ? (
@@ -229,6 +212,41 @@ function SkillEditor({ detail, skill, linkMode, onLinkMode, onClose, run }: {
       ) : (
         <button type="button" className="flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-extrabold text-cardinal hover:bg-eel" onClick={() => setConfirming(true)}><IconTrash size={17} />Delete skill</button>
       )}
+    </div>
+  );
+}
+
+// The start flag: learning begins at the skills linked to it.
+function FlagEditor({ detail, linkMode, onLinkMode, onClose, run }: {
+  detail: SubjectDetail;
+  linkMode: boolean;
+  onLinkMode: (on: boolean) => void;
+  onClose: () => void;
+  run: Run;
+}) {
+  const skills = detail.units.flatMap((unit) => unit.skills);
+  const starts = skills.filter((skill) => skill.start);
+  return (
+    <div className="map-panel">
+      <div className="flex items-center justify-between">
+        <h2 className="map-panel-title">Start flag</h2>
+        <button type="button" className="rounded-lg p-1.5 text-wolf hover:bg-eel" onClick={onClose} aria-label="Close start flag"><IconX size={18} /></button>
+      </div>
+      <p className="text-sm font-semibold leading-5 text-wolf">Learning begins at the skills linked to the flag. Without any, it begins at {skills[0]?.title ?? "the first skill"}.</p>
+      {starts.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {starts.map((skill) => (
+            <li key={skill.id} className="flex items-center gap-1 rounded-xl bg-eel py-1 pl-3 pr-1 text-sm font-bold">
+              {skill.title}
+              <button type="button" className="rounded-lg p-1 text-wolf hover:bg-swan hover:text-ink" onClick={() => void run(`/api/skills/${START_NODE}/links/${skill.id}`, "DELETE")} aria-label={`Unlink ${skill.title}`}><IconX size={15} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button variant={linkMode ? "primary" : "secondary"} className="w-full gap-2" onClick={() => onLinkMode(!linkMode)} aria-pressed={linkMode}>
+        <IconLink size={18} />{linkMode ? "Done linking" : "Link skills"}
+      </Button>
+      {linkMode && <p className="text-xs font-semibold leading-5 text-wolf">Click skills on the map to make them start skills. Click one again to unlink it.</p>}
     </div>
   );
 }

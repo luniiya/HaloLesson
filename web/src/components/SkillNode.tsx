@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { TIER_LABELS, TIERS, type Medal, type Skill } from "@halolesson/shared";
-import { IconBarbell, IconBookmark, IconBook2, IconCheck, IconFlag3Filled, IconLock, IconStar } from "@tabler/icons-react";
+import { IconBarbell, IconBookmark, IconBook2, IconCheck, IconLock, IconStar } from "@tabler/icons-react";
 import { Ring, type RingArc } from "./SubjectNode";
 
 // Face and ledge colors of a skill that cleared Expert. The medal fades from
@@ -47,7 +47,6 @@ export default function SkillNode({ skill, palette, onSelect, className = "skill
   const state = skill.locked ? "locked" : progressLabel(skill);
   return (
     <button type="button" className={`level ${className} ${skill.locked ? "skill-node-locked" : ""}`} style={{ "--level": base, "--level-dark": dark, ...style } as CSSProperties} onClick={() => onSelect(skill)} aria-pressed={pressed} aria-label={`${skill.title}${skill.start ? ", start" : ""}, ${state}`}>
-      {skill.start && <span className="skill-start" aria-hidden="true"><IconFlag3Filled size={13} />Start</span>}
       <span className="level-ring level-ring-custom">
         <Ring arcs={tierRing(skill)} />
         <span className="level-button">

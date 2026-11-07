@@ -259,6 +259,8 @@ if (!graphSkillColumns.includes("y")) db.exec("ALTER TABLE skills ADD COLUMN y R
 if (!graphSkillColumns.includes("is_start")) db.exec("ALTER TABLE skills ADD COLUMN is_start INTEGER NOT NULL DEFAULT 0");
 // The map structure the stored positions were computed for (see ensureLayout).
 if (!columnsOf("subjects").includes("layout_hash")) db.exec("ALTER TABLE subjects ADD COLUMN layout_hash TEXT");
+// The start flag's place on the map, laid out with the skills.
+if (!columnsOf("subjects").includes("start_x")) db.exec("ALTER TABLE subjects ADD COLUMN start_x REAL; ALTER TABLE subjects ADD COLUMN start_y REAL");
 if (!columnsOf("subjects").includes("unlock_in_order")) db.exec("ALTER TABLE subjects ADD COLUMN unlock_in_order INTEGER NOT NULL DEFAULT 0");
 
 // Skill tiers: every exercise sits in one tier's pool (0 easy .. 3 expert) and

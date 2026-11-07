@@ -1,4 +1,4 @@
-import { isLevel, isTier, medalFor, skillLocks, TIERS, type Tier, isSubjectIcon, isSubjectType, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_COLORS, type Skill, type Subject, type SubjectColor, type SubjectDetail, type SubjectIcon, type SubjectType, type Unit } from "@halolesson/shared";
+import { DEFAULT_UNLOCK_IN_ORDER, DEFAULT_UNLOCK_TIER, isLevel, isTier, medalFor, skillLocks, TIERS, type Tier, isSubjectIcon, isSubjectType, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_COLORS, type Skill, type Subject, type SubjectColor, type SubjectDetail, type SubjectIcon, type SubjectType, type Unit } from "@halolesson/shared";
 import { db } from "./db";
 import { ensureLayout } from "./skillGraph";
 
@@ -129,7 +129,7 @@ export function createSubject(
   gradientEnd: string,
   options: { icon?: SubjectIcon | null; folderId?: string | null; type?: SubjectType; level?: number | null; notes?: string; unlockInOrder?: boolean; unlockTier?: Tier } = {},
 ): Subject {
-  const fields = checkSubjectFields({ name, description, color, gradientStart, gradientEnd, icon: options.icon ?? null, level: options.level ?? null, notes: options.notes ?? "", unlockInOrder: options.unlockInOrder ?? false, unlockTier: options.unlockTier ?? "easy" });
+  const fields = checkSubjectFields({ name, description, color, gradientStart, gradientEnd, icon: options.icon ?? null, level: options.level ?? null, notes: options.notes ?? "", unlockInOrder: options.unlockInOrder ?? DEFAULT_UNLOCK_IN_ORDER, unlockTier: options.unlockTier ?? DEFAULT_UNLOCK_TIER });
   const type = options.type ?? "subject";
   if (!isSubjectType(type)) throw new Error("Choose a valid type: subject or tracker");
   const folderId = options.folderId ?? null;
@@ -263,5 +263,7 @@ export function getSubject(userId: string, subjectId: string): SubjectDetail {
     const locked = skillLocks(units.flatMap((unit) => unit.skills), links, subject.unlockTier);
     for (const skill of units.flatMap((unit) => unit.skills)) skill.locked = locked.has(skill.id);
   }
-  return { subject, units, links };
+  const flag = db.query<{ start_x: number | null; start_y: number | null }, [string]>("SELECT start_x, start_y FROM subjects WHERE id = ?").get(subjectId)!;
+  const start = flag.start_x === null || flag.start_y === null ? null : { x: flag.start_x, y: flag.start_y };
+  return { subject, units, links, start };
 }

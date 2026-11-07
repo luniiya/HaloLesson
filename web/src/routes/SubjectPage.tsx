@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { IconArrowLeft, IconBroadcast, IconCheck, IconCircleDashed, IconPencil, IconShare } from "@tabler/icons-react";
-import type { Skill, SubjectDetail } from "@halolesson/shared";
+import { START_NODE, type SubjectDetail } from "@halolesson/shared";
 import { api } from "$lib/api";
 import { useLibraryEvents } from "$lib/events";
 import MapEditor from "../components/MapEditor";
@@ -63,16 +63,20 @@ export default function SubjectPage() {
   const skills = detail?.units.flatMap((unit) => unit.skills) ?? [];
   const selectedSkill = skills.find((skill) => skill.id === selectedId) ?? null;
 
-  // In link mode a click links the skill to the selected one, or unlinks it.
-  async function select(skill: Skill) {
+  // In link mode a click links the node (a skill or the start flag) to the
+  // selected one, or unlinks it. A skill linked to the flag is a start skill.
+  async function select(id: string) {
     setLinkError("");
-    if (!(editing && linkMode && selectedId && skill.id !== selectedId)) {
-      setSelectedId(skill.id);
+    if (!(editing && linkMode && selectedId && id !== selectedId)) {
+      setSelectedId(id);
       return;
     }
-    const isLinked = detail!.links.some(([a, b]) => (a === selectedId && b === skill.id) || (b === selectedId && a === skill.id));
+    const flagLink = id === START_NODE || selectedId === START_NODE;
+    const isLinked = flagLink
+      ? Boolean(skills.find((skill) => skill.id === (id === START_NODE ? selectedId : id))?.start)
+      : detail!.links.some(([a, b]) => (a === selectedId && b === id) || (b === selectedId && a === id));
     try {
-      const result = await api<{ detail: SubjectDetail }>(`/api/skills/${selectedId}/links/${skill.id}`, { method: isLinked ? "DELETE" : "PUT" });
+      const result = await api<{ detail: SubjectDetail }>(`/api/skills/${selectedId}/links/${id}`, { method: isLinked ? "DELETE" : "PUT" });
       setDetail(result.detail);
     } catch (cause) {
       setLinkError(cause instanceof Error ? cause.message : "Couldn't link those skills");
@@ -109,7 +113,7 @@ export default function SubjectPage() {
   return (
     <div className={`subject-map-page ${editing ? "subject-map-editing" : ""}`}>
       {skills.length > 0 || editing ? (
-        <SkillMap detail={detail} selectedId={selectedId} linkMode={editing && linkMode} onSelect={(skill) => void select(skill)} onBackground={() => { if (!linkMode) setSelectedId(null); }} />
+        <SkillMap detail={detail} selectedId={selectedId} linkMode={editing && linkMode} onSelect={(id) => void select(id)} onBackground={() => { if (!linkMode) setSelectedId(null); }} />
       ) : (
         <section className="grid h-full place-items-center px-6 text-center">
           <div>
@@ -145,6 +149,7 @@ export default function SubjectPage() {
           <MapEditor
             detail={detail}
             selected={selectedSkill}
+            flagSelected={selectedId === START_NODE}
             linkMode={linkMode}
             onDetail={setDetail}
             onSelect={(id) => { setSelectedId(id); if (!id) setLinkMode(false); }}

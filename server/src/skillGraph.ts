@@ -1,4 +1,4 @@
-import { MAP_SPACING, MAP_Y_SCALE, MAX_HEARTS, MAX_LINKS_PER_SKILL, MAX_SESSION_SIZE, skillLocks, TIERS } from "@halolesson/shared";
+import { MAP_SPACING, MAP_Y_SCALE, MAX_HEARTS, MAX_LINKS_PER_SKILL, MAX_SESSION_SIZE, skillLocks, START_NODE, TIERS } from "@halolesson/shared";
 import { db } from "./db";
 
 // The skill map of a subject: regions (stored as units), skills and the links
@@ -182,7 +182,19 @@ export function deleteSkill(userId: string, skillId: string): { subjectId: strin
 const pair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a]);
 const linkCount = (skillId: string) => count("SELECT COUNT(*) AS count FROM skill_links WHERE a = ? OR b = ?", skillId, skillId);
 
+// Linking a skill to the start flag (START_NODE) makes it a start skill.
+function setStart(userId: string, first: string, second: string, start: boolean): { subjectId: string } | null {
+  if (first !== START_NODE && second !== START_NODE) return null;
+  if (first === second) throw new Error("Link the start flag to a skill");
+  const skillId = first === START_NODE ? second : first;
+  const { subjectId } = ownedGraphSkill(userId, skillId);
+  db.run("UPDATE skills SET is_start = ? WHERE id = ?", [start ? 1 : 0, skillId]);
+  return { subjectId };
+}
+
 export function linkSkills(userId: string, first: string, second: string): { subjectId: string } {
+  const flag = setStart(userId, first, second, true);
+  if (flag) return flag;
   if (first === second) throw new Error("A skill can't link to itself");
   const one = ownedGraphSkill(userId, first);
   const two = ownedGraphSkill(userId, second);
@@ -195,6 +207,8 @@ export function linkSkills(userId: string, first: string, second: string): { sub
 }
 
 export function unlinkSkills(userId: string, first: string, second: string): { subjectId: string } {
+  const flag = setStart(userId, first, second, false);
+  if (flag) return flag;
   const { subjectId } = ownedGraphSkill(userId, first);
   ownedGraphSkill(userId, second);
   const [a, b] = pair(first, second);
@@ -232,7 +246,7 @@ export function isSkillLocked(userId: string, skillId: string): boolean {
 // the map's structure with the one stored at the last layout.
 
 // Bump to relayout every subject after changing the algorithm.
-const LAYOUT_VERSION = 4;
+const LAYOUT_VERSION = 5;
 
 interface LayoutNode {
   id: string;
@@ -409,15 +423,19 @@ export function computeLayout(seed: string, nodes: LayoutNode[], links: Array<[n
   }
 }
 
+// The start flag is laid out as one more node, in the region of the first
+// skill it links to, so it sits beside where learning begins.
 export function ensureLayout(subjectId: string): void {
-  const skills = db.query<{ id: string; unit_id: string; x: number | null; y: number | null }, [string]>(
-    `SELECT skills.id, skills.unit_id, skills.x, skills.y FROM skills JOIN units ON units.id = skills.unit_id
+  const skills = db.query<{ id: string; unit_id: string; x: number | null; y: number | null; is_start: number }, [string]>(
+    `SELECT skills.id, skills.unit_id, skills.x, skills.y, skills.is_start FROM skills JOIN units ON units.id = skills.unit_id
      WHERE units.subject_id = ? ORDER BY units.position, units.created_at, skills.position, skills.created_at`,
   ).all(subjectId);
   const links = db.query<{ a: string; b: string }, [string]>("SELECT a, b FROM skill_links WHERE subject_id = ? ORDER BY a, b").all(subjectId);
-  const shape = `${LAYOUT_VERSION}|${skills.map((skill) => `${skill.id}:${skill.unit_id}`).join(",")}|${links.map((link) => `${link.a}-${link.b}`).join(",")}`;
+  const marked = skills.filter((skill) => skill.is_start === 1);
+  const starts = (marked.length ? marked : skills.slice(0, 1)).map((skill) => skill.id);
+  const shape = `${LAYOUT_VERSION}|${skills.map((skill) => `${skill.id}:${skill.unit_id}`).join(",")}|${links.map((link) => `${link.a}-${link.b}`).join(",")}|${starts.join(",")}`;
   const hash = Bun.hash(shape).toString(36);
-  const stored = db.query<{ layout_hash: string | null }, [string]>("SELECT layout_hash FROM subjects WHERE id = ?").get(subjectId);
+  const stored = db.query<{ layout_hash: string | null; start_x: number | null; start_y: number | null }, [string]>("SELECT layout_hash, start_x, start_y FROM subjects WHERE id = ?").get(subjectId);
   if (!stored || stored.layout_hash === hash) return;
 
   const regions = [...new Set(skills.map((skill) => skill.unit_id))];
@@ -429,9 +447,16 @@ export function ensureLayout(subjectId: string): void {
     y: skill.y ?? 0,
     placed: skill.x !== null && skill.y !== null,
   }));
-  computeLayout(subjectId, nodes, links.map((link) => [index.get(link.a)!, index.get(link.b)!]), regions.length);
+  const pairs = links.map((link): [number, number] => [index.get(link.a)!, index.get(link.b)!]);
+  const flag = starts.length ? nodes.length : -1;
+  if (flag >= 0) {
+    nodes.push({ id: START_NODE, region: nodes[index.get(starts[0]!)!]!.region, x: stored.start_x ?? 0, y: stored.start_y ?? 0, placed: stored.start_x !== null && stored.start_y !== null });
+    for (const id of starts) pairs.push([flag, index.get(id)!]);
+  }
+  computeLayout(subjectId, nodes, pairs, regions.length);
+  const flagNode = flag >= 0 ? nodes[flag]! : null;
   db.transaction(() => {
-    for (const node of nodes) db.run("UPDATE skills SET x = ?, y = ? WHERE id = ?", [node.x, node.y, node.id]);
-    db.run("UPDATE subjects SET layout_hash = ? WHERE id = ?", [hash, subjectId]);
+    for (const node of nodes) if (node !== flagNode) db.run("UPDATE skills SET x = ?, y = ? WHERE id = ?", [node.x, node.y, node.id]);
+    db.run("UPDATE subjects SET layout_hash = ?, start_x = ?, start_y = ? WHERE id = ?", [hash, flagNode?.x ?? null, flagNode?.y ?? null, subjectId]);
   })();
 }

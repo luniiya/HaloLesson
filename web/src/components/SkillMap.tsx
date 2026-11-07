@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { IconFocusCentered, IconMinus, IconPlus } from "@tabler/icons-react";
-import { isFinished, MAP_SPACING, MAP_Y_SCALE, type Skill, type SubjectDetail } from "@halolesson/shared";
+import { isFinished, MAP_SPACING, MAP_Y_SCALE, START_NODE, type SubjectDetail } from "@halolesson/shared";
 import { mixColors } from "$lib/colors";
 import SkillNode from "./SkillNode";
+import StartFlag from "./StartFlag";
 
 // The subject's skill map. Positions come from the server's layout; the
 // browser only draws them and lets you pan (drag) and zoom (wheel, pinch,
@@ -14,6 +15,21 @@ const MIN_SCALE = 0.2;
 const MAX_SCALE = 1.6;
 // Movement before a press counts as a drag rather than a click.
 const DRAG_PX = 5;
+// From the top of the start flag to the foot of its pole, its point on the map.
+const FLAG_ANCHOR = 123;
+// Links stop just short of a skill's outer ring (half of .skill-node's
+// --ring-size, the round cap of the 8px stroke, and a small gap) so they never
+// show through the gaps between the ring's segments.
+const NODE_EDGE = 58 + 4 + 6;
+
+// The part of the line from a to b outside both ends' circles, or null when they overlap.
+function trimmed(a: { x: number; y: number }, b: { x: number; y: number }, fromA: number, fromB: number) {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  if (length <= fromA + fromB) return null;
+  const ux = (b.x - a.x) / length;
+  const uy = (b.y - a.y) / length;
+  return { x1: a.x + ux * fromA, y1: a.y + uy * fromA, x2: b.x - ux * fromB, y2: b.y - uy * fromB };
+}
 
 interface View {
   scale: number;
@@ -27,12 +43,13 @@ export function regionColors(detail: SubjectDetail): Map<string, string> {
   return new Map(detail.units.map((unit, index) => [unit.id, mixColors(gradientStart, gradientEnd, count <= 1 ? 0 : index / (count - 1))]));
 }
 
+// selectedId is a skill id or START_NODE for the start flag.
 export default function SkillMap({ detail, selectedId, linkMode, onSelect, onBackground }: {
   detail: SubjectDetail;
   selectedId: string | null;
-  // When on, clicking a skill links it to (or unlinks it from) the selected one.
+  // When on, clicking a node links it to (or unlinks it from) the selected one.
   linkMode: boolean;
-  onSelect: (skill: Skill) => void;
+  onSelect: (id: string) => void;
   onBackground: () => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -41,18 +58,28 @@ export default function SkillMap({ detail, selectedId, linkMode, onSelect, onBac
   const colors = useMemo(() => regionColors(detail), [detail]);
 
   const skills = useMemo(() => detail.units.flatMap((unit) => unit.skills.filter((skill) => skill.x !== null && skill.y !== null).map((skill) => ({ skill, unitId: unit.id }))), [detail]);
+  const points = useMemo(() => [...skills.map(({ skill }) => ({ x: skill.x!, y: skill.y! })), ...(detail.start ? [detail.start] : [])], [skills, detail.start]);
   const bounds = useMemo(() => {
-    if (!skills.length) return { minX: 0, minY: 0, width: PAD * 2, height: PAD * 2 };
-    const xs = skills.map(({ skill }) => skill.x!);
-    const ys = skills.map(({ skill }) => skill.y! * MAP_Y_SCALE);
+    if (!points.length) return { minX: 0, minY: 0, width: PAD * 2, height: PAD * 2 };
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y * MAP_Y_SCALE);
     const minX = Math.min(...xs) - PAD;
     const minY = Math.min(...ys) - PAD;
     return { minX, minY, width: Math.max(...xs) + PAD - minX, height: Math.max(...ys) + PAD - minY };
-  }, [skills]);
+  }, [points]);
   // Drawn y is squashed (MAP_Y_SCALE) so the map reads as a tilted plane.
-  const at = useCallback((skill: Skill) => ({ x: skill.x! - bounds.minX, y: skill.y! * MAP_Y_SCALE - bounds.minY }), [bounds]);
+  const at = useCallback((point: { x: number | null; y: number | null }) => ({ x: point.x! - bounds.minX, y: point.y! * MAP_Y_SCALE - bounds.minY }), [bounds]);
   const byId = useMemo(() => new Map(skills.map(({ skill }) => [skill.id, skill])), [skills]);
-  const linked = useMemo(() => new Set(detail.links.flatMap(([a, b]) => (a === selectedId ? [b] : b === selectedId ? [a] : []))), [detail.links, selectedId]);
+  // The flag links to the start skills; with none marked, the first skill starts (drawn dashed).
+  const marked = useMemo(() => skills.filter(({ skill }) => skill.start).map(({ skill }) => skill), [skills]);
+  const flagLinks = marked.length ? marked : skills.slice(0, 1).map(({ skill }) => skill);
+  const linked = useMemo(() => {
+    if (selectedId === START_NODE) return new Set(marked.map((skill) => skill.id));
+    const ids = new Set(detail.links.flatMap(([a, b]) => (a === selectedId ? [b] : b === selectedId ? [a] : [])));
+    if (selectedId && byId.get(selectedId)?.start) ids.add(START_NODE);
+    return ids;
+  }, [detail.links, selectedId, byId, marked]);
+  const flagColors = [detail.subject.gradientStart, mixColors(detail.subject.gradientStart, "#000000", 0.25)] as const;
 
   useLayoutEffect(() => {
     const node = viewport.current;
@@ -71,10 +98,9 @@ export default function SkillMap({ detail, selectedId, linkMode, onSelect, onBac
       const fitted = Math.max(scale, MIN_SCALE);
       return { scale: fitted, x: (size.width - bounds.width * fitted) / 2, y: (size.height - bounds.height * fitted) / 2 };
     }
-    const start = skills.find(({ skill }) => skill.start)?.skill ?? skills[0]!.skill;
-    const point = at(start);
+    const point = at(detail.start ?? skills.find(({ skill }) => skill.start)?.skill ?? skills[0]!.skill);
     return { scale: 0.7, x: size.width / 2 - point.x * 0.7, y: size.height / 2 - point.y * 0.7 };
-  }, [size, bounds, skills, at]);
+  }, [size, bounds, skills, at, detail.start]);
 
   // Fit when the subject opens (and once its first skills arrive), not on every live update.
   const fittedFor = useRef("");
@@ -184,19 +210,43 @@ export default function SkillMap({ detail, selectedId, linkMode, onSelect, onBac
               {detail.links.map(([a, b]) => {
                 const one = byId.get(a);
                 const two = byId.get(b);
-                if (!one || !two) return null;
+                const line = one && two && trimmed(at(one), at(two), NODE_EDGE, NODE_EDGE);
+                if (!one || !two || !line) return null;
                 const done = isFinished(one, detail.subject.unlockTier) && isFinished(two, detail.subject.unlockTier);
                 const active = a === selectedId || b === selectedId;
                 return (
                   <line
                     key={`${a}-${b}`}
-                    x1={at(one).x} y1={at(one).y} x2={at(two).x} y2={at(two).y}
+                    {...line}
                     className={`skill-map-link ${active ? "skill-map-link-active" : ""}`}
                     style={done && !active ? { stroke: colors.get(regionOf.get(a)!) } : undefined}
                   />
                 );
               })}
+              {detail.start && flagLinks.map((skill) => {
+                const active = selectedId === START_NODE || skill.id === selectedId;
+                const line = trimmed(at(detail.start!), at(skill), 0, NODE_EDGE);
+                if (!line) return null;
+                return (
+                  <line
+                    key={`start-${skill.id}`}
+                    {...line}
+                    className={`skill-map-link ${active ? "skill-map-link-active" : ""} ${marked.length ? "" : "skill-map-link-implicit"}`}
+                    style={active ? undefined : { stroke: flagColors[0] }}
+                  />
+                );
+              })}
             </svg>
+            {detail.start && (
+              <StartFlag
+                color={flagColors[0]}
+                dark={flagColors[1]}
+                pressed={selectedId === START_NODE}
+                linked={linkMode && linked.has(START_NODE)}
+                onSelect={() => onSelect(START_NODE)}
+                style={{ left: at(detail.start).x, top: at(detail.start).y - FLAG_ANCHOR }}
+              />
+            )}
             {detail.units.map((unit) => {
               const members = unit.skills.filter((skill) => byId.has(skill.id));
               if (!members.length) return null;
@@ -212,7 +262,7 @@ export default function SkillMap({ detail, selectedId, linkMode, onSelect, onBac
                   key={skill.id}
                   skill={skill}
                   palette={[base, mixColors(base, "#000000", 0.25)]}
-                  onSelect={onSelect}
+                  onSelect={(picked) => onSelect(picked.id)}
                   className={`skill-node map-node ${linkMode && linked.has(skill.id) ? "map-node-linked" : ""}`}
                   pressed={skill.id === selectedId}
                   style={{ left: point.x, top: `calc(${point.y}px - var(--ring-size) / 2)` }}
