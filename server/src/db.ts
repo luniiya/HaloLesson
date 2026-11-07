@@ -260,3 +260,48 @@ if (!graphSkillColumns.includes("is_start")) db.exec("ALTER TABLE skills ADD COL
 // The map structure the stored positions were computed for (see ensureLayout).
 if (!columnsOf("subjects").includes("layout_hash")) db.exec("ALTER TABLE subjects ADD COLUMN layout_hash TEXT");
 if (!columnsOf("subjects").includes("unlock_in_order")) db.exec("ALTER TABLE subjects ADD COLUMN unlock_in_order INTEGER NOT NULL DEFAULT 0");
+
+// Skill tiers: every exercise sits in one tier's pool (0 easy .. 3 expert) and
+// lists the concepts it tests. A skill clears its tiers in order; clearing
+// Expert sets expert_cleared_at, which drives the gold/silver/copper medal.
+// Skill settings decide the questions and hearts per session.
+if (!columnsOf("exercises").includes("tier")) db.exec("ALTER TABLE exercises ADD COLUMN tier INTEGER NOT NULL DEFAULT 0");
+if (!columnsOf("exercises").includes("concepts_json")) db.exec("ALTER TABLE exercises ADD COLUMN concepts_json TEXT NOT NULL DEFAULT '[]'");
+if (!columnsOf("skills").includes("session_size")) db.exec("ALTER TABLE skills ADD COLUMN session_size INTEGER NOT NULL DEFAULT 10");
+if (!columnsOf("skills").includes("hearts")) db.exec("ALTER TABLE skills ADD COLUMN hearts INTEGER NOT NULL DEFAULT 3");
+if (!columnsOf("skill_progress").includes("tiers_cleared")) {
+  db.exec("ALTER TABLE skill_progress ADD COLUMN tiers_cleared INTEGER NOT NULL DEFAULT 0");
+  // Stars came before tiers: a starred skill counted as finished, so keep it open.
+  db.exec("UPDATE skill_progress SET tiers_cleared = 1 WHERE stars > 0");
+}
+if (!columnsOf("skill_progress").includes("expert_cleared_at")) db.exec("ALTER TABLE skill_progress ADD COLUMN expert_cleared_at TEXT");
+
+// Practice sessions live on the server so hearts and clears can't be skipped.
+// queue_json is the exercise ids still to answer; a wrong one goes to the end.
+// Every attempt records its session, tier and whether it was a retry, so the
+// recommender can learn from failed sessions too.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS practice_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    tier INTEGER NOT NULL,
+    hearts INTEGER NOT NULL,
+    hearts_left INTEGER NOT NULL,
+    queue_json TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    answered INTEGER NOT NULL DEFAULT 0,
+    correct INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    started_at TEXT NOT NULL,
+    ended_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_practice_sessions_user ON practice_sessions(user_id, skill_id, started_at);
+`);
+const tierAttemptColumns = columnsOf("attempts");
+if (!tierAttemptColumns.includes("session_id")) db.exec("ALTER TABLE attempts ADD COLUMN session_id TEXT");
+if (!tierAttemptColumns.includes("retry")) db.exec("ALTER TABLE attempts ADD COLUMN retry INTEGER NOT NULL DEFAULT 0");
+
+// The tier (0 easy .. 3 expert) a skill must clear before the skills linked to it open.
+if (!columnsOf("subjects").includes("unlock_tier")) db.exec("ALTER TABLE subjects ADD COLUMN unlock_tier INTEGER NOT NULL DEFAULT 0");

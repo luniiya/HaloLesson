@@ -1,4 +1,4 @@
-import { isLevel, skillLocks, isSubjectIcon, isSubjectType, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_COLORS, type Skill, type Subject, type SubjectColor, type SubjectDetail, type SubjectIcon, type SubjectType, type Unit } from "@halolesson/shared";
+import { isLevel, isTier, medalFor, skillLocks, TIERS, type Tier, isSubjectIcon, isSubjectType, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_COLORS, type Skill, type Subject, type SubjectColor, type SubjectDetail, type SubjectIcon, type SubjectType, type Unit } from "@halolesson/shared";
 import { db } from "./db";
 import { ensureLayout } from "./skillGraph";
 
@@ -23,6 +23,7 @@ interface SubjectRow {
   level: number | null;
   notes: string;
   unlock_in_order: number;
+  unlock_tier: number;
 }
 
 function toSubject(row: SubjectRow): Subject {
@@ -47,12 +48,13 @@ function toSubject(row: SubjectRow): Subject {
     level: row.level,
     notes: row.notes,
     unlockInOrder: row.unlock_in_order === 1,
+    unlockTier: TIERS[row.unlock_tier] ?? "easy",
   };
 }
 
 const subjectSelect = `
   SELECT subjects.*, COUNT(DISTINCT units.id) AS unit_count, COUNT(DISTINCT skills.id) AS skill_count,
-    COUNT(DISTINCT CASE WHEN skill_progress.stars > 0 THEN skills.id END) AS completed_count
+    COUNT(DISTINCT CASE WHEN skill_progress.tiers_cleared > 0 THEN skills.id END) AS completed_count
   FROM subjects
   LEFT JOIN units ON units.subject_id = subjects.id
   LEFT JOIN skills ON skills.unit_id = units.id
@@ -92,6 +94,7 @@ export interface SubjectFields {
   level: number | null;
   notes: string;
   unlockInOrder: boolean;
+  unlockTier: Tier;
 }
 
 export function checkLevel(level: unknown): number | null {
@@ -112,6 +115,7 @@ export function checkSubjectFields(fields: SubjectFields): SubjectFields {
   if (fields.icon !== null && !isSubjectIcon(fields.icon)) throw new Error("Choose a valid subject icon");
   checkLevel(fields.level);
   if (typeof fields.unlockInOrder !== "boolean") throw new Error("unlockInOrder must be true or false");
+  if (!isTier(fields.unlockTier)) throw new Error(`unlockTier must be one of ${TIERS.join(", ")}`);
   if (fields.notes.length > MAX_NOTES_LENGTH) throw new Error(`Notes must be ${MAX_NOTES_LENGTH} characters or fewer`);
   return { ...fields, name, description };
 }
@@ -123,9 +127,9 @@ export function createSubject(
   color: SubjectColor,
   gradientStart: string,
   gradientEnd: string,
-  options: { icon?: SubjectIcon | null; folderId?: string | null; type?: SubjectType; level?: number | null; notes?: string; unlockInOrder?: boolean } = {},
+  options: { icon?: SubjectIcon | null; folderId?: string | null; type?: SubjectType; level?: number | null; notes?: string; unlockInOrder?: boolean; unlockTier?: Tier } = {},
 ): Subject {
-  const fields = checkSubjectFields({ name, description, color, gradientStart, gradientEnd, icon: options.icon ?? null, level: options.level ?? null, notes: options.notes ?? "", unlockInOrder: options.unlockInOrder ?? false });
+  const fields = checkSubjectFields({ name, description, color, gradientStart, gradientEnd, icon: options.icon ?? null, level: options.level ?? null, notes: options.notes ?? "", unlockInOrder: options.unlockInOrder ?? false, unlockTier: options.unlockTier ?? "easy" });
   const type = options.type ?? "subject";
   if (!isSubjectType(type)) throw new Error("Choose a valid type: subject or tracker");
   const folderId = options.folderId ?? null;
@@ -134,8 +138,8 @@ export function createSubject(
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   db.run(
-    "INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, unlock_in_order, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [id, userId, type, fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, fields.unlockInOrder ? 1 : 0, folderId, nextPosition(userId, folderId), now, now],
+    "INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, unlock_in_order, unlock_tier, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, userId, type, fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, fields.unlockInOrder ? 1 : 0, TIERS.indexOf(fields.unlockTier), folderId, nextPosition(userId, folderId), now, now],
   );
   if (fields.level !== null) recordLevel(userId, id, fields.level, now);
   return getSubject(userId, id).subject;
@@ -160,9 +164,10 @@ export function updateSubject(userId: string, subjectId: string, patch: Partial<
     level: patch.level === undefined ? current.level : patch.level,
     notes: patch.notes ?? current.notes,
     unlockInOrder: patch.unlockInOrder ?? current.unlockInOrder,
+    unlockTier: patch.unlockTier ?? current.unlockTier,
   });
-  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, unlock_in_order = ?, updated_at = ? WHERE id = ?", [
-    fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, fields.unlockInOrder ? 1 : 0, new Date().toISOString(), subjectId,
+  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, unlock_in_order = ?, unlock_tier = ?, updated_at = ? WHERE id = ?", [
+    fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, fields.unlockInOrder ? 1 : 0, TIERS.indexOf(fields.unlockTier), new Date().toISOString(), subjectId,
   ]);
   if (fields.level !== current.level) recordLevel(userId, subjectId, fields.level);
   return getSubject(userId, subjectId).subject;
@@ -177,6 +182,13 @@ interface UnitRow {
   created_at: string;
 }
 
+// Exercises per tier, from a JSON list of every exercise's tier.
+function tierCounts(json: string): number[] {
+  const counts = TIERS.map(() => 0);
+  for (const tier of JSON.parse(json) as number[]) if (tier >= 0 && tier < counts.length) counts[tier]! += 1;
+  return counts;
+}
+
 interface SkillRow {
   id: string;
   unit_id: string;
@@ -184,9 +196,13 @@ interface SkillRow {
   description: string;
   position: number;
   created_at: string;
-  stars: number;
+  tiers_cleared: number;
+  expert_cleared_at: string | null;
   mastery: number;
   last_practiced_at: string | null;
+  session_size: number;
+  hearts: number;
+  tier_counts: string;
   x: number | null;
   y: number | null;
   is_start: number;
@@ -211,8 +227,9 @@ export function getSubject(userId: string, subjectId: string): SubjectDetail {
     createdAt: unit.created_at,
     skills: db
       .query<SkillRow, [string, string]>(
-        `SELECT skills.*, COALESCE(skill_progress.stars, 0) AS stars,
-         COALESCE(skill_progress.mastery, 0) AS mastery, skill_progress.last_practiced_at
+        `SELECT skills.*, COALESCE(skill_progress.tiers_cleared, 0) AS tiers_cleared, skill_progress.expert_cleared_at,
+         COALESCE(skill_progress.mastery, 0) AS mastery, skill_progress.last_practiced_at,
+         (SELECT json_group_array(tier) FROM exercises WHERE exercises.skill_id = skills.id) AS tier_counts
          FROM skills LEFT JOIN skill_progress ON skill_progress.skill_id = skills.id AND skill_progress.user_id = ?
          WHERE skills.unit_id = ? ORDER BY skills.position, skills.created_at`,
       )
@@ -224,9 +241,13 @@ export function getSubject(userId: string, subjectId: string): SubjectDetail {
         description: skill.description,
         position: skill.position,
         createdAt: skill.created_at,
-        stars: skill.stars,
+        tiersCleared: skill.tiers_cleared,
+        medal: medalFor(skill.expert_cleared_at),
         mastery: skill.mastery,
         lastPracticedAt: skill.last_practiced_at,
+        sessionSize: skill.session_size,
+        hearts: skill.hearts,
+        tierCounts: tierCounts(skill.tier_counts),
         x: skill.x,
         y: skill.y,
         start: skill.is_start === 1,
@@ -239,7 +260,7 @@ export function getSubject(userId: string, subjectId: string): SubjectDetail {
     .map((link): [string, string] => [link.a, link.b]);
   const subject = toSubject(row);
   if (subject.unlockInOrder) {
-    const locked = skillLocks(units.flatMap((unit) => unit.skills), links);
+    const locked = skillLocks(units.flatMap((unit) => unit.skills), links, subject.unlockTier);
     for (const skill of units.flatMap((unit) => unit.skills)) skill.locked = locked.has(skill.id);
   }
   return { subject, units, links };

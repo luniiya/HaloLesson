@@ -49,6 +49,7 @@ export function toHalolesson(file: ExportFile): Uint8Array {
       id: subject.id, type: subject.type ?? "subject", name: subject.name, description: subject.description,
       color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon ?? null,
       unlockInOrder: subject.unlockInOrder ?? false,
+      unlockTier: subject.unlockTier ?? "easy",
     });
     if (file.kind === "backup") {
       placement[name] = { folder: subject.folder ?? null, position: subject.position ?? index, archivedAt: subject.archivedAt ?? null };
@@ -70,6 +71,8 @@ export function toHalolesson(file: ExportFile): Uint8Array {
           description: skill.description,
           ...(skill.start ? { start: true } : {}),
           ...(skill.links?.length ? { links: skill.links } : {}),
+          sessionSize: skill.sessionSize,
+          hearts: skill.hearts,
           exercises: skill.exercises.map(({ attempts: _attempts, ...exercise }) => exercise),
         });
       });

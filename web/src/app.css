@@ -469,13 +469,36 @@
     --ledge: 7px;
   }
 
-  .skill-stars {
-    @apply mt-1 flex gap-0.5 text-lg leading-none text-swan;
+  .settings-tabs {
+    @apply flex gap-1 border-b-2 border-swan;
   }
 
-  .skill-stars .skill-star-earned {
-    @apply text-bee;
-    text-shadow: 0 1px 0 #d99a00;
+  .settings-tab {
+    @apply -mb-0.5 border-b-2 border-transparent px-3 py-2 text-sm font-extrabold text-wolf hover:text-ink;
+  }
+
+  .settings-tab[aria-selected="true"] {
+    @apply border-secondary text-secondary;
+  }
+
+  .skill-tiers {
+    @apply mt-4 flex flex-wrap gap-2;
+  }
+
+  .skill-tier {
+    @apply flex items-center gap-1 rounded-xl border-2 px-3 py-1.5 text-xs font-black uppercase tracking-wide;
+  }
+
+  .skill-tier-cleared {
+    @apply border-bee bg-bee/15 text-ink hover:bg-bee/30;
+  }
+
+  .skill-tier-next {
+    @apply border-accent text-accent-deep hover:bg-accent-pale;
+  }
+
+  .skill-tier-closed {
+    @apply border-swan text-hare;
   }
 
   .skill-node-title {
@@ -519,6 +542,10 @@
     right: 0.5rem;
     height: 28%;
     background: rgb(255 255 255 / 30%);
+  }
+
+  .practice-hearts {
+    @apply flex items-center gap-1 text-lg font-black text-cardinal;
   }
 
   .practice-main {

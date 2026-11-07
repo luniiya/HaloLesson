@@ -43,7 +43,7 @@ describe("trackers and levels", () => {
     const result = commit(user.id, { command: { op: "putSubject", subject: { name: "Spanish" } } }).result as { id: string };
     const unit = commit(user.id, { command: { op: "putUnit", unit: { subjectId: result.id, title: "Basics" } } }).result as { id: string };
     const skills = ["a", "b"].map((title) => (commit(user.id, { command: { op: "putSkill", skill: { unitId: unit.id, title } } }).result as { id: string }).id);
-    db.run("INSERT INTO skill_progress (user_id, skill_id, stars, mastery, correct_attempts, total_attempts) VALUES (?, ?, 1, 0.3, 1, 1)", [user.id, skills[0]!]);
+    db.run("INSERT INTO skill_progress (user_id, skill_id, tiers_cleared, mastery, correct_attempts, total_attempts) VALUES (?, ?, 1, 0.3, 1, 1)", [user.id, skills[0]!]);
     expect(getSubject(user.id, result.id).subject).toMatchObject({ skillCount: 2, completedCount: 1 });
   });
 });

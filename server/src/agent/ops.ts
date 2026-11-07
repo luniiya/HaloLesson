@@ -1,4 +1,4 @@
-import { isSubjectIcon, isSubjectType, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
+import { isSubjectIcon, isSubjectType, isTier, medalFor, TIERS, type Tier, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
 import { buildExport, checkImportOptions, HEX_COLOR, importSubjects, list, parseExercise, parseImport, previewImport, record, text, type ParsedImport } from "../dataExport";
 import { readUpload } from "../halolessonFile";
 import { db } from "../db";
@@ -6,12 +6,14 @@ import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
 import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
 import { checkStatsOptions, getStats } from "../stats";
 import { checkLevel, getSubject, nextPosition, recordLevel } from "../subjects";
-import { linkSkills, MAX_REGIONS_PER_SUBJECT, MAX_SKILLS_PER_REGION, unlinkSkills, updateSkill } from "../skillGraph";
+import { skillInsight } from "../recommender";
+import { linkSkills, MAX_REGIONS_PER_SUBJECT, ownedGraphSkill, MAX_SKILLS_PER_REGION, unlinkSkills, updateSkill } from "../skillGraph";
 
 const MAX_SUBJECTS = 500;
 const MAX_UNITS_PER_SUBJECT = MAX_REGIONS_PER_SUBJECT;
 const MAX_SKILLS_PER_UNIT = MAX_SKILLS_PER_REGION;
-const MAX_EXERCISES_PER_SKILL = 50;
+// Four tier pools share this.
+const MAX_EXERCISES_PER_SKILL = 400;
 const MAX_REPORTS_PER_USER = 50;
 const REQUEST_ID = /^[a-zA-Z0-9_-]{8,100}$/;
 const REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
@@ -32,6 +34,8 @@ const notFound = (what: string) => new AgentError(`${what} not found`, 404, "NOT
 
 export interface AgentExercise {
   id: string;
+  tier: Tier;
+  concepts: string[];
   type: ExerciseType;
   prompt: string;
   options?: string[];
@@ -46,17 +50,20 @@ interface ExerciseRow {
   prompt: string;
   content_json: string;
   explanation: string;
+  tier: number;
+  concepts_json: string;
 }
 
 function toExercise(row: ExerciseRow): AgentExercise {
   const content = JSON.parse(row.content_json) as { options?: string[]; correctIndex?: number; answers?: string[] };
+  const shared = { id: row.id, tier: TIERS[row.tier] ?? "easy", concepts: JSON.parse(row.concepts_json) as string[] };
   return row.type === "multiple_choice"
-    ? { id: row.id, type: row.type, prompt: row.prompt, options: content.options ?? [], correctIndex: content.correctIndex ?? 0, explanation: row.explanation }
-    : { id: row.id, type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
+    ? { ...shared, type: row.type, prompt: row.prompt, options: content.options ?? [], correctIndex: content.correctIndex ?? 0, explanation: row.explanation }
+    : { ...shared, type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
 }
 
 function exercisesOf(skillId: string): AgentExercise[] {
-  return db.query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE skill_id = ? ORDER BY position, created_at").all(skillId).map(toExercise);
+  return db.query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE skill_id = ? ORDER BY tier, position, created_at").all(skillId).map(toExercise);
 }
 
 // ---- Reads ----
@@ -108,7 +115,7 @@ export function readSubject(userId: string, subjectId: string) {
   const { subject, units } = detail;
   return {
     revision: libraryRevision(userId),
-    subject: { id: subject.id, type: subject.type, level: subject.level, notes: subject.notes, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId, unlockInOrder: subject.unlockInOrder },
+    subject: { id: subject.id, type: subject.type, level: subject.level, notes: subject.notes, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId, unlockInOrder: subject.unlockInOrder, unlockTier: subject.unlockTier },
     links: detail.links,
     units: units.map((unit) => ({
       id: unit.id,
@@ -120,8 +127,11 @@ export function readSubject(userId: string, subjectId: string) {
         description: skill.description,
         start: skill.start,
         locked: skill.locked,
-        stars: skill.stars,
+        tiersCleared: skill.tiersCleared,
+        medal: skill.medal,
         mastery: skill.mastery,
+        sessionSize: skill.sessionSize,
+        hearts: skill.hearts,
         exercises: exercisesOf(skill.id),
       })),
     })),
@@ -133,7 +143,8 @@ interface ProgressRow {
   skill_title: string;
   subject_id: string;
   subject_name: string;
-  stars: number;
+  tiers_cleared: number;
+  expert_cleared_at: string | null;
   mastery: number;
   correct_attempts: number;
   total_attempts: number;
@@ -143,6 +154,7 @@ interface ProgressRow {
 interface MistakeRow extends ExerciseRow {
   skill_id: string;
   answer_json: string;
+  duration_ms: number | null;
   created_at: string;
 }
 
@@ -208,7 +220,7 @@ export function readProgress(userId: string, subjectId?: string) {
   const skills = db
     .query<ProgressRow, string[]>(`
       SELECT skills.id AS skill_id, skills.title AS skill_title, subjects.id AS subject_id, subjects.name AS subject_name,
-        skill_progress.stars, skill_progress.mastery, skill_progress.correct_attempts, skill_progress.total_attempts, skill_progress.last_practiced_at
+        skill_progress.tiers_cleared, skill_progress.expert_cleared_at, skill_progress.mastery, skill_progress.correct_attempts, skill_progress.total_attempts, skill_progress.last_practiced_at
       FROM skill_progress JOIN skills ON skills.id = skill_progress.skill_id
       JOIN units ON units.id = skills.unit_id JOIN subjects ON subjects.id = units.subject_id
       WHERE skill_progress.user_id = ? ${scope} ORDER BY skill_progress.mastery
@@ -216,7 +228,7 @@ export function readProgress(userId: string, subjectId?: string) {
     .all(...params);
   const mistakes = db
     .query<MistakeRow, string[]>(`
-      SELECT exercises.*, attempts.answer_json, attempts.created_at AS created_at FROM attempts
+      SELECT exercises.*, attempts.answer_json, attempts.duration_ms, attempts.created_at AS created_at FROM attempts
       JOIN exercises ON exercises.id = attempts.exercise_id JOIN skills ON skills.id = exercises.skill_id
       JOIN units ON units.id = skills.unit_id JOIN subjects ON subjects.id = units.subject_id
       WHERE attempts.user_id = ? AND attempts.is_correct = 0 ${scope} ORDER BY attempts.created_at DESC LIMIT 30
@@ -229,8 +241,11 @@ export function readProgress(userId: string, subjectId?: string) {
       skillTitle: row.skill_title,
       subjectId: row.subject_id,
       subjectName: row.subject_name,
-      stars: row.stars,
+      tiersCleared: row.tiers_cleared,
+      medal: medalFor(row.expert_cleared_at),
       mastery: Math.round(row.mastery * 100) / 100,
+      // Concept tags this learner fails most on this skill, worst first.
+      struggles: skillInsight(userId, row.skill_id).concepts.filter((concept) => concept.wrong > 0).slice(0, 5),
       correctAttempts: row.correct_attempts,
       totalAttempts: row.total_attempts,
       lastPracticedAt: row.last_practiced_at,
@@ -241,13 +256,27 @@ export function readProgress(userId: string, subjectId?: string) {
       return {
         exerciseId: row.id,
         skillId: row.skill_id,
+        tier: exercise.tier,
+        concepts: exercise.concepts,
         prompt: exercise.prompt,
+        durationMs: row.duration_ms,
         answerGiven: exercise.type === "multiple_choice" && typeof given === "number" ? (exercise.options?.[given] ?? given) : given,
         correctAnswer: exercise.type === "multiple_choice" ? exercise.options?.[exercise.correctIndex ?? 0] : exercise.answers?.[0],
         at: row.created_at,
       };
     }),
   };
+}
+
+// What the learner struggles with on one skill: concept tags worst first,
+// and the exercises they are most likely to fail now (the ones practice serves).
+export function readInsight(userId: string, skillId: string) {
+  try {
+    ownedGraphSkill(userId, skillId);
+  } catch {
+    throw notFound("Skill");
+  }
+  return { revision: libraryRevision(userId), ...skillInsight(userId, skillId) };
 }
 
 // ---- Writes ----
@@ -307,7 +336,7 @@ function countOf(sql: string, param: string): number {
 function putSubject(userId: string, input: Record<string, unknown>) {
   const id = optionalId(input.id, "subject.id");
   const current = id
-    ? db.query<{ type: SubjectType; name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; level: number | null; notes: string; folder_id: string | null; unlock_in_order: number }, [string, string]>(
+    ? db.query<{ type: SubjectType; name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; level: number | null; notes: string; folder_id: string | null; unlock_in_order: number; unlock_tier: number }, [string, string]>(
         "SELECT * FROM subjects WHERE id = ? AND user_id = ?",
       ).get(id, userId)
     : null;
@@ -333,13 +362,15 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   const notes = input.notes === undefined && current ? current.notes : text(input.notes ?? "", "subject.notes", MAX_NOTES_LENGTH);
   if (input.unlockInOrder !== undefined && typeof input.unlockInOrder !== "boolean") throw new AgentError("subject.unlockInOrder must be true or false", 400, "INVALID");
   const unlockInOrder = input.unlockInOrder === undefined ? current?.unlock_in_order === 1 : input.unlockInOrder;
+  if (input.unlockTier !== undefined && !isTier(input.unlockTier)) throw new AgentError(`subject.unlockTier must be one of ${TIERS.join(", ")}`, 400, "INVALID");
+  const unlockTier = input.unlockTier === undefined ? (current?.unlock_tier ?? 0) : TIERS.indexOf(input.unlockTier as Tier);
   // folderId moves the subject into a folder (null: top level); position is its index among that folder's items.
   const folderId = input.folderId === undefined ? undefined : input.folderId === null ? null : requiredId(input.folderId, "subject.folderId");
   const index = position(input.position);
   const now = new Date().toISOString();
   if (current && id) {
-    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, unlock_in_order = ?, updated_at = ? WHERE id = ?", [
-      name, description, color, gradientStart, gradientEnd, icon, level, notes, unlockInOrder ? 1 : 0, now, id,
+    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, unlock_in_order = ?, unlock_tier = ?, updated_at = ? WHERE id = ?", [
+      name, description, color, gradientStart, gradientEnd, icon, level, notes, unlockInOrder ? 1 : 0, unlockTier, now, id,
     ]);
     if (level !== current.level) recordLevel(userId, id, level, now);
     if (folderId !== undefined || index !== undefined) moveItem(userId, "subject", id, folderId === undefined ? current.folder_id : folderId, index);
@@ -350,8 +381,8 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   }
   if (folderId && !db.query("SELECT 1 FROM folders WHERE id = ? AND user_id = ?").get(folderId, userId)) throw notFound("Folder");
   const newId = crypto.randomUUID();
-  db.run("INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, unlock_in_order, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-    newId, userId, type, name, description, color, gradientStart, gradientEnd, icon, level, notes, unlockInOrder ? 1 : 0, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
+  db.run("INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, unlock_in_order, unlock_tier, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+    newId, userId, type, name, description, color, gradientStart, gradientEnd, icon, level, notes, unlockInOrder ? 1 : 0, unlockTier, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
   ]);
   if (level !== null) recordLevel(userId, newId, level, now);
   if (index !== undefined) moveItem(userId, "subject", newId, folderId ?? null, index);
@@ -435,19 +466,21 @@ function putSkill(userId: string, input: Record<string, unknown>) {
     exerciseIds = exercises.map(({ id: exerciseId, exercise }, exerciseIndex) => {
       const content = exercise.type === "multiple_choice" ? { options: exercise.options, correctIndex: exercise.correctIndex } : { answers: exercise.answers };
       if (exerciseId) {
-        db.run("UPDATE exercises SET type = ?, prompt = ?, content_json = ?, explanation = ?, position = ? WHERE id = ?", [
-          exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, exerciseIndex, exerciseId,
+        db.run("UPDATE exercises SET type = ?, prompt = ?, content_json = ?, explanation = ?, tier = ?, concepts_json = ?, position = ? WHERE id = ?", [
+          exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, TIERS.indexOf(exercise.tier ?? "easy"), JSON.stringify(exercise.concepts ?? []), exerciseIndex, exerciseId,
         ]);
         return exerciseId;
       }
       const newId = crypto.randomUUID();
-      db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
-        newId, skillId, exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, exerciseIndex, now,
+      db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, tier, concepts_json, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+        newId, skillId, exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, TIERS.indexOf(exercise.tier ?? "easy"), JSON.stringify(exercise.concepts ?? []), exerciseIndex, now,
       ]);
       return newId;
     });
   }
-  if (input.start !== undefined) updateSkill(userId, skillId, { start: input.start });
+  if (input.start !== undefined || input.sessionSize !== undefined || input.hearts !== undefined) {
+    updateSkill(userId, skillId, { start: input.start, sessionSize: input.sessionSize, hearts: input.hearts });
+  }
   if (input.linkTo !== undefined) {
     for (const [linkIndex, other] of list(input.linkTo, "skill.linkTo").entries()) linkSkills(userId, skillId, requiredId(other, `skill.linkTo[${linkIndex}]`));
   }

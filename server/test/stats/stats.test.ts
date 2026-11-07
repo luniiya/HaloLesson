@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { AgentError, commit, readStats } from "../../src/agent/ops";
 import { buildExport, importSubjects, parseImport } from "../../src/dataExport";
 import { db } from "../../src/db";
-import { submitAttempt } from "../../src/practice";
+import { submitAttempt } from "../practice-helper";
 import { checkStatsOptions, getStats } from "../../src/stats";
 import { createSubject, updateSubject } from "../../src/subjects";
 import { makeUser } from "../helpers";

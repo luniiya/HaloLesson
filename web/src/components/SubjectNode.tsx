@@ -20,7 +20,7 @@ export interface RingArc {
 }
 
 // Drawn as SVG so arcs get round ends. A full circle is one arc from 0 to 360.
-function Ring({ arcs }: { arcs: RingArc[] }) {
+export function Ring({ arcs }: { arcs: RingArc[] }) {
   return (
     <svg className="level-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
       {arcs.filter((arc) => arc.to - arc.from > 0.5).map((arc, index) => (

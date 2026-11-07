@@ -185,7 +185,7 @@ export default function SkillMap({ detail, selectedId, linkMode, onSelect, onBac
                 const one = byId.get(a);
                 const two = byId.get(b);
                 if (!one || !two) return null;
-                const done = isFinished(one) && isFinished(two);
+                const done = isFinished(one, detail.subject.unlockTier) && isFinished(two, detail.subject.unlockTier);
                 const active = a === selectedId || b === selectedId;
                 return (
                   <line

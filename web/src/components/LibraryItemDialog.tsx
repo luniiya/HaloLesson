@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import UnlockInOrderToggle from "./UnlockInOrderToggle";
 import { Link } from "react-router";
 import { IconArchive, IconArrowRight, IconFolderOpen, IconTrash, IconX } from "@tabler/icons-react";
-import { SUBJECT_COLORS, libraryStates, type Folder, type Library, type Subject, type SubjectColor, type SubjectIcon } from "@halolesson/shared";
+import { SUBJECT_COLORS, libraryStates, type Folder, type Library, type Subject, type SubjectColor, type SubjectIcon, type Tier } from "@halolesson/shared";
 import { entryParent, folderPath, libraryApi, type Entry } from "$lib/library";
 import Button from "./Button";
 import IconPicker from "./IconPicker";
@@ -83,7 +83,12 @@ export default function LibraryItemDialog({ entry, library, onOpenFolder, onChan
   );
 }
 
+type SubjectTab = "details" | "look" | "progression";
+
+// Subject settings in tabs: what it is, how it looks, and how its skills
+// open. Trackers have no skills, so no progression tab. One form saves all tabs.
 function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields: Parameters<typeof libraryApi.updateSubject>[1]) => void }) {
+  const [tab, setTab] = useState<SubjectTab>("details");
   const [name, setName] = useState(subject.name);
   const [description, setDescription] = useState(subject.description);
   const [color, setColor] = useState<SubjectColor>(subject.color);
@@ -91,6 +96,8 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
   const [gradientEnd, setGradientEnd] = useState(subject.gradientEnd);
   const [icon, setIcon] = useState<SubjectIcon | null>(subject.icon);
   const [unlockInOrder, setUnlockInOrder] = useState(subject.unlockInOrder);
+  const [unlockTier, setUnlockTier] = useState<Tier>(subject.unlockTier);
+  const tabs: Array<[SubjectTab, string]> = [["details", "Details"], ["look", "Look"], ...(subject.type === "subject" ? [["progression", "Progression"] as [SubjectTab, string]] : [])];
 
   function chooseColor(option: SubjectColor) {
     setColor(option);
@@ -100,33 +107,52 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
 
   return (
     <form
-      className="mt-5 grid gap-4 sm:grid-cols-2"
-      onSubmit={(event) => { event.preventDefault(); onSave({ name, description, color, gradientStart, gradientEnd, icon, ...(subject.type === "subject" ? { unlockInOrder } : {}) }); }}
+      className="mt-5 flex flex-col gap-4"
+      // The name is required: when it's empty on another tab, show it.
+      onInvalidCapture={() => setTab("details")}
+      onSubmit={(event) => { event.preventDefault(); onSave({ name, description, color, gradientStart, gradientEnd, icon, ...(subject.type === "subject" ? { unlockInOrder, unlockTier } : {}) }); }}
     >
-      <label className="form-label">Name<input className="form-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label>
-      <label className="form-label">Description<input className="form-input" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} /></label>
-      <fieldset>
-        <legend className="mb-2 text-sm font-extrabold text-wolf">Color</legend>
-        <div className="flex flex-wrap gap-3">
-          {SUBJECT_COLORS.map((option) => (
-            <label key={option} className={`color-option color-${option} relative ${color === option ? "color-option-selected" : ""}`} title={option}>
-              <input type="radio" name={`color-${subject.id}`} checked={color === option} onChange={() => chooseColor(option)} className="absolute inset-0 z-10 m-0 size-full cursor-pointer opacity-0" />
-              <span className="sr-only">{option}</span>
-            </label>
-          ))}
+      <div className="settings-tabs" role="tablist" aria-label="Subject settings">
+        {tabs.map(([id, label]) => (
+          <button key={id} type="button" role="tab" id={`subject-tab-${id}`} aria-selected={tab === id} aria-controls={`subject-panel-${id}`} className="settings-tab" onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
+
+      <div role="tabpanel" id="subject-panel-details" aria-labelledby="subject-tab-details" hidden={tab !== "details"} className="grid gap-4 sm:grid-cols-2">
+        <label className="form-label">Name<input className="form-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label>
+        <label className="form-label">Description<input className="form-input" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} /></label>
+      </div>
+
+      <div role="tabpanel" id="subject-panel-look" aria-labelledby="subject-tab-look" hidden={tab !== "look"} className="grid gap-4 sm:grid-cols-2">
+        <fieldset>
+          <legend className="mb-2 text-sm font-extrabold text-wolf">Color</legend>
+          <div className="flex flex-wrap gap-3">
+            {SUBJECT_COLORS.map((option) => (
+              <label key={option} className={`color-option color-${option} relative ${color === option ? "color-option-selected" : ""}`} title={option}>
+                <input type="radio" name={`color-${subject.id}`} checked={color === option} onChange={() => chooseColor(option)} className="absolute inset-0 z-10 m-0 size-full cursor-pointer opacity-0" />
+                <span className="sr-only">{option}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {subject.type === "subject" && <fieldset>
+          <legend className="mb-2 text-sm font-extrabold text-wolf">Skill path gradient</legend>
+          <div className="flex items-center gap-3 rounded-xl bg-eel p-3">
+            <input type="color" value={gradientStart} onChange={(event) => setGradientStart(event.target.value)} aria-label="Gradient start color" />
+            <div className="h-3 flex-1 rounded-full" style={{ background: `linear-gradient(90deg, ${gradientStart}, ${gradientEnd})` }} aria-hidden="true" />
+            <input type="color" value={gradientEnd} onChange={(event) => setGradientEnd(event.target.value)} aria-label="Gradient end color" />
+          </div>
+        </fieldset>}
+        <div className="sm:col-span-2"><IconPicker value={icon} onChange={setIcon} name={name} description={description} /></div>
+      </div>
+
+      {subject.type === "subject" && (
+        <div role="tabpanel" id="subject-panel-progression" aria-labelledby="subject-tab-progression" hidden={tab !== "progression"}>
+          <UnlockInOrderToggle checked={unlockInOrder} onChange={setUnlockInOrder} tier={unlockTier} onTierChange={setUnlockTier} />
         </div>
-      </fieldset>
-      {subject.type === "subject" && <fieldset>
-        <legend className="mb-2 text-sm font-extrabold text-wolf">Skill path gradient</legend>
-        <div className="flex items-center gap-3 rounded-xl bg-eel p-3">
-          <input type="color" value={gradientStart} onChange={(event) => setGradientStart(event.target.value)} aria-label="Gradient start color" />
-          <div className="h-3 flex-1 rounded-full" style={{ background: `linear-gradient(90deg, ${gradientStart}, ${gradientEnd})` }} aria-hidden="true" />
-          <input type="color" value={gradientEnd} onChange={(event) => setGradientEnd(event.target.value)} aria-label="Gradient end color" />
-        </div>
-      </fieldset>}
-      {subject.type === "subject" && <UnlockInOrderToggle className="sm:col-span-2" checked={unlockInOrder} onChange={setUnlockInOrder} />}
-      <div className="sm:col-span-2"><IconPicker value={icon} onChange={setIcon} name={name} description={description} /></div>
-      <div className="flex justify-end sm:col-span-2"><Button type="submit">Save changes</Button></div>
+      )}
+
+      <div className="flex justify-end"><Button type="submit">Save changes</Button></div>
     </form>
   );
 }

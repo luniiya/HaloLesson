@@ -1,4 +1,4 @@
-import { MAP_SPACING, MAP_Y_SCALE, MAX_LINKS_PER_SKILL, skillLocks } from "@halolesson/shared";
+import { MAP_SPACING, MAP_Y_SCALE, MAX_HEARTS, MAX_LINKS_PER_SKILL, MAX_SESSION_SIZE, skillLocks, TIERS } from "@halolesson/shared";
 import { db } from "./db";
 
 // The skill map of a subject: regions (stored as units), skills and the links
@@ -92,6 +92,9 @@ export interface SkillFields {
   // skill, then the subject's first region (made on the spot if there is none).
   unitId?: unknown;
   start?: unknown;
+  // Skill settings: questions per practice session, and hearts per session.
+  sessionSize?: unknown;
+  hearts?: unknown;
 }
 
 function regionFor(userId: string, subjectId: string, unitId: unknown, near: string[]): string {
@@ -116,6 +119,20 @@ function checkStart(value: unknown): boolean | undefined {
   return value;
 }
 
+function checkSetting(value: unknown, label: string, max: number): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > max) throw new Error(`${label} must be a whole number from 1 to ${max}`);
+  return value;
+}
+
+// Session size and hearts, shared by every way of creating or editing a skill.
+export function setSkillSettings(skillId: string, fields: Pick<SkillFields, "sessionSize" | "hearts">): void {
+  const sessionSize = checkSetting(fields.sessionSize, "Questions per session", MAX_SESSION_SIZE);
+  const hearts = checkSetting(fields.hearts, "Hearts", MAX_HEARTS);
+  if (sessionSize !== undefined) db.run("UPDATE skills SET session_size = ? WHERE id = ?", [sessionSize, skillId]);
+  if (hearts !== undefined) db.run("UPDATE skills SET hearts = ? WHERE id = ?", [hearts, skillId]);
+}
+
 // `linkTo` links the new skill to these skills of the same subject.
 export function createSkill(userId: string, subjectId: string, fields: SkillFields & { linkTo?: unknown }): { id: string } {
   graphSubject(userId, subjectId);
@@ -126,10 +143,13 @@ export function createSkill(userId: string, subjectId: string, fields: SkillFiel
   const linkTo = (fields.linkTo ?? []) as string[];
   const unitId = regionFor(userId, subjectId, fields.unitId, linkTo);
   checkRegionRoom(unitId);
+  checkSetting(fields.sessionSize, "Questions per session", MAX_SESSION_SIZE);
+  checkSetting(fields.hearts, "Hearts", MAX_HEARTS);
   const id = crypto.randomUUID();
   db.run("INSERT INTO skills (id, unit_id, title, description, position, is_start, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
     id, unitId, title, description, nextPosition("skills", "unit_id", unitId), start ? 1 : 0, new Date().toISOString(),
   ]);
+  setSkillSettings(id, fields);
   for (const other of linkTo) linkSkills(userId, id, other);
   return { id };
 }
@@ -139,12 +159,15 @@ export function updateSkill(userId: string, skillId: string, fields: SkillFields
   const current = db.query<{ title: string; description: string }, [string]>("SELECT title, description FROM skills WHERE id = ?").get(skillId)!;
   const title = fields.title === undefined ? current.title : text(fields.title, "Skill name", 120, true);
   const description = fields.description === undefined ? current.description : text(fields.description, "Skill description", 500);
+  checkSetting(fields.sessionSize, "Questions per session", MAX_SESSION_SIZE);
+  checkSetting(fields.hearts, "Hearts", MAX_HEARTS);
   const unitId = fields.unitId === undefined ? currentUnit : regionFor(userId, subjectId, fields.unitId, []);
   if (unitId !== currentUnit) checkRegionRoom(unitId);
   db.run("UPDATE skills SET title = ?, description = ?, unit_id = ? WHERE id = ?", [title, description, unitId, skillId]);
   if (unitId !== currentUnit) db.run("UPDATE skills SET position = ? WHERE id = ?", [nextPosition("skills", "unit_id", unitId), skillId]);
   const start = checkStart(fields.start);
   if (start !== undefined) db.run("UPDATE skills SET is_start = ? WHERE id = ?", [start ? 1 : 0, skillId]);
+  setSkillSettings(skillId, fields);
   return { subjectId };
 }
 
@@ -184,15 +207,16 @@ export function unlinkSkills(userId: string, first: string, second: string): { s
 // Whether practice is closed for this skill (only when the subject unlocks in order).
 export function isSkillLocked(userId: string, skillId: string): boolean {
   const { subjectId } = ownedGraphSkill(userId, skillId);
-  if (!db.query("SELECT 1 FROM subjects WHERE id = ? AND unlock_in_order = 1").get(subjectId)) return false;
-  const skills = db.query<{ id: string; stars: number; is_start: number }, [string, string]>(
-    `SELECT skills.id, COALESCE(skill_progress.stars, 0) AS stars, skills.is_start FROM skills
+  const subject = db.query<{ unlock_tier: number }, [string]>("SELECT unlock_tier FROM subjects WHERE id = ? AND unlock_in_order = 1").get(subjectId);
+  if (!subject) return false;
+  const skills = db.query<{ id: string; tiers_cleared: number; is_start: number }, [string, string]>(
+    `SELECT skills.id, COALESCE(skill_progress.tiers_cleared, 0) AS tiers_cleared, skills.is_start FROM skills
      JOIN units ON units.id = skills.unit_id
      LEFT JOIN skill_progress ON skill_progress.skill_id = skills.id AND skill_progress.user_id = ?
      WHERE units.subject_id = ? ORDER BY units.position, units.created_at, skills.position, skills.created_at`,
   ).all(userId, subjectId);
   const links = db.query<{ a: string; b: string }, [string]>("SELECT a, b FROM skill_links WHERE subject_id = ?").all(subjectId);
-  return skillLocks(skills.map((skill) => ({ id: skill.id, stars: skill.stars, start: skill.is_start === 1 })), links.map((link) => [link.a, link.b])).has(skillId);
+  return skillLocks(skills.map((skill) => ({ id: skill.id, tiersCleared: skill.tiers_cleared, start: skill.is_start === 1 })), links.map((link) => [link.a, link.b]), TIERS[subject.unlock_tier]).has(skillId);
 }
 
 // ---- Layout ----

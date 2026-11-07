@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AgentError, commit, readLibrary, readProgress, readSubject } from "../../src/agent/ops";
-import { submitAttempt } from "../../src/practice";
+import { submitAttempt } from "../practice-helper";
 import { makeUser } from "../helpers";
 
 function put(userId: string, command: Record<string, unknown>, extra: Record<string, unknown> = {}) {

@@ -1,4 +1,4 @@
-import { APP_VERSION, HALOLESSON_FILE_EXTENSION, isSubjectIcon, type ExportFile, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type User } from "@halolesson/shared";
+import { APP_VERSION, HALOLESSON_FILE_EXTENSION, isSubjectIcon, type ExportFile, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type Tier, type User } from "@halolesson/shared";
 import { resolve, sep } from "node:path";
 import {
   adminCreateUser,
@@ -21,19 +21,20 @@ import {
   userFromRequest,
 } from "./auth";
 import { handleMcp } from "./agent/mcp";
-import { AgentError, commit, readExport, readImportPreview, readLibrary, readProgress, readStats, readSubject, report } from "./agent/ops";
+import { AgentError, commit, readExport, readImportPreview, readLibrary, readInsight, readProgress, readStats, readSubject, report } from "./agent/ops";
 import { buildAgentPrompt, buildAgentSpec } from "./agent/prompt";
 import { agentFromRequest, createAgentToken, listAgentTokens, RateLimitError, revokeAgentToken, type AgentAuth } from "./agent/tokens";
 import { buildExport, checkImportOptions, getExportStats, importSubjects, parseImport, previewImport } from "./dataExport";
 import { readUpload, toHalolesson } from "./halolessonFile";
 import { eventStream, libraryChanged } from "./events";
-import { getPracticeSession, submitAttempt } from "./practice";
+import { answerSession, getSession, quitSession, startSession } from "./practice";
+import { skillInsight } from "./recommender";
 import { getSettings, updateSettings } from "./settings";
 import { checkStatsOptions, getStats } from "./stats";
 import { copySharedSubject, createShareLink, getShareLink, getSharedSubject, revokeShareLink } from "./shares";
 import { createFolder, getLibrary, moveItem, purgeTrash, restoreItem, setArchived, trashItem, updateFolder } from "./library";
 import { createSubject, getSubject, listSubjects, updateSubject } from "./subjects";
-import { createRegion, createSkill, deleteRegion, deleteSkill, linkSkills, unlinkSkills, updateRegion, updateSkill } from "./skillGraph";
+import { createRegion, createSkill, deleteRegion, deleteSkill, linkSkills, ownedGraphSkill, unlinkSkills, updateRegion, updateSkill } from "./skillGraph";
 
 const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
@@ -415,6 +416,7 @@ const server = Bun.serve({
     "/api/agent/spec": (req) => new Response(buildAgentSpec(publicOrigin(req)), { headers: { "Content-Type": "text/plain; charset=utf-8" } }),
     "/api/agent/library": (req) => agentRoute(req, (auth) => readLibrary(auth.user.id)),
     "/api/agent/subjects/:id": (req) => agentRoute(req, (auth) => readSubject(auth.user.id, req.params.id)),
+    "/api/agent/skills/:id/insight": (req) => agentRoute(req, (auth) => readInsight(auth.user.id, req.params.id)),
     "/api/agent/progress": (req) => agentRoute(req, (auth) => readProgress(auth.user.id, new URL(req.url).searchParams.get("subjectId") || undefined)),
     "/api/agent/stats": (req) => agentRoute(req, (auth) => {
       const params = new URL(req.url).searchParams;
@@ -458,6 +460,7 @@ const server = Bun.serve({
               level: input.level === undefined ? undefined : (input.level as number | null),
               notes: optionalString(input.notes),
               unlockInOrder: input.unlockInOrder === undefined ? undefined : (input.unlockInOrder as boolean),
+              unlockTier: input.unlockTier === undefined ? undefined : (input.unlockTier as Tier),
             },
           );
           libraryChanged(user.id, subject.id);
@@ -487,6 +490,7 @@ const server = Bun.serve({
             level: input.level === undefined ? undefined : (input.level as number | null),
             notes: optionalString(input.notes),
             unlockInOrder: input.unlockInOrder === undefined ? undefined : (input.unlockInOrder as boolean),
+            unlockTier: input.unlockTier === undefined ? undefined : (input.unlockTier as Tier),
           }),
         ),
     },
@@ -591,12 +595,40 @@ const server = Bun.serve({
         }
       },
     },
-    "/api/skills/:id/practice": (req) => {
+    "/api/skills/:id/sessions": {
+      POST: async (req) => {
+        try {
+          const input = await body(req);
+          return Response.json(startSession(requireUser(req).id, req.params.id, input.tier), { status: 201 });
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
+    },
+    "/api/skills/:id/insight": (req) => {
       try {
-        return Response.json(getPracticeSession(requireUser(req).id, req.params.id));
+        const userId = requireUser(req).id;
+        ownedGraphSkill(userId, req.params.id);
+        return Response.json(skillInsight(userId, req.params.id));
       } catch (error) {
         return errorResponse(error);
       }
+    },
+    "/api/sessions/:id": (req) => {
+      try {
+        return Response.json(getSession(requireUser(req).id, req.params.id));
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+    "/api/sessions/:id/quit": {
+      POST: (req) => {
+        try {
+          return Response.json(quitSession(requireUser(req).id, req.params.id));
+        } catch (error) {
+          return errorResponse(error);
+        }
+      },
     },
     "/api/stats": (req) => {
       try {
@@ -606,11 +638,11 @@ const server = Bun.serve({
         return errorResponse(error);
       }
     },
-    "/api/exercises/:id/attempt": {
+    "/api/sessions/:id/answer": {
       POST: async (req) => {
         try {
           const input = await body(req);
-          return Response.json(submitAttempt(requireUser(req).id, req.params.id, input.answer, input.durationMs));
+          return Response.json(answerSession(requireUser(req).id, req.params.id, input.exerciseId, input.answer, input.durationMs));
         } catch (error) {
           return errorResponse(error);
         }

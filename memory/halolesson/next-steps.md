@@ -106,3 +106,6 @@ All uncommitted in the working tree (user manages git). Built this session:
 - On user `luniiya`: a "Map of Mathematics" seed plus 3 older random test maps (the user hasn't said whether to trash them).
 - Next: the user is testing in a real-world scenario. Tracker milestones are parked for later.
 - Nothing was visually checked by me; the user does the visual testing.
+
+## 2026-11-07: skill tiers
+Built skill tiers, hearts, medals and the FSRS recommender. Details are in [[skill-levels-vision]] under "Built". Next: the start flag (waiting on the user's screenshot), more answer types, then procedural generators.

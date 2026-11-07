@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { IconBolt, IconCalendarCheck, IconClock, IconCrown, IconFlame, IconStarFilled, IconTarget, IconTrendingUp, IconTrophy, type Icon } from "@tabler/icons-react";
-import { LEVEL_LABELS, libraryStates, STATS_RANGES, type Library, type Stats, type StatsDay, type Subject } from "@halolesson/shared";
+import { IconBolt, IconCalendarCheck, IconClock, IconCrown, IconFlame, IconTarget, IconTrendingUp, IconTrophy, type Icon } from "@tabler/icons-react";
+import { LEVEL_LABELS, libraryStates, STATS_RANGES, type Library, type Stats, type StatsDay, type StatsSkill, type Subject } from "@halolesson/shared";
 import { api } from "$lib/api";
 import { useLibraryEvents } from "$lib/events";
 import { libraryApi } from "$lib/library";
 import { formatDate } from "$lib/server";
 import { iconFor } from "$lib/subjectIcons";
 import { ActivityCalendar, CategoryColumns, ChartCard, LevelSteps, shortDate, StackedColumns, TrendLine, type LevelPoint } from "../components/charts";
+import { MEDAL_COLORS, progressLabel } from "../components/SkillNode";
 import { subjectColors } from "../components/SubjectNode";
 
 const RANGES: Array<{ value: string; label: string }> = [
@@ -131,10 +132,12 @@ function LevelDumbbells({ stats, subjects }: { stats: Stats; subjects: Map<strin
   );
 }
 
-function Stars({ count }: { count: number }) {
+// Easy, Medium and Hard as three pips; a medal (Expert cleared) colors all three.
+function TierPips({ skill }: { skill: Pick<StatsSkill, "tiersCleared" | "medal"> }) {
+  const medal = skill.medal ? MEDAL_COLORS[skill.medal][0] : null;
   return (
-    <span className="flex gap-0.5" aria-label={`${count} of 3 stars`}>
-      {[0, 1, 2].map((index) => <IconStarFilled key={index} size={14} className={index < count ? "text-bee" : "text-swan"} aria-hidden="true" />)}
+    <span className="flex gap-0.5" aria-label={progressLabel(skill)} title={progressLabel(skill)}>
+      {[0, 1, 2].map((index) => <span key={index} className={`h-2 w-3 rounded-full ${medal || index < skill.tiersCleared ? "bg-bee" : "bg-swan"}`} style={medal ? { background: medal } : undefined} aria-hidden="true" />)}
     </span>
   );
 }
@@ -392,7 +395,7 @@ function PracticeStats({ stats, subject, subjects }: { stats: Stats; subject: Su
             {[...stats.skills].sort((a, b) => a.mastery - b.mastery).map((skill) => (
               <li key={skill.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t-2 border-swan py-3 first:border-t-0 first:pt-0">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-extrabold"><span className="truncate">{skill.title}</span><Stars count={skill.stars} /></p>
+                  <p className="flex items-center gap-2 text-sm font-extrabold"><span className="truncate">{skill.title}</span><TierPips skill={skill} /></p>
                   <p className="truncate text-xs font-bold text-wolf">{skill.unitTitle} · {accuracy(skill.correct, skill.answered)} accuracy · last {ago(skill.lastPracticedAt).toLowerCase()}</p>
                   <div className="mt-1.5 max-w-xs"><Meter value={skill.mastery} color="#58cc02" /></div>
                 </div>

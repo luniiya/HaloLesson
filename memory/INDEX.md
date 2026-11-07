@@ -37,3 +37,5 @@
 - [PWA](halolesson/pwa.md) — installable: manifest, icons, sw.js (API never cached), prod-only registration
 - [Export format v2](halolesson/export-format-v2.md) — .halo zip; subject page = share one, settings = full backup; ask on re-import; preview+pick
 - [Skill graph vision](halolesson/skill-graph-vision.md) — subject page = 2D skill graph like the Map of Mathematics; server-side layout; prereq lock setting; edit mode
+- [Skill levels vision](halolesson/skill-levels-vision.md) — 4 tiers, hearts, gold/silver/copper decay, procedural generators, recommender, retry wrong answers
+- [Recommender research](halolesson/recommender-research.md) — FSRS, Duolingo HLR, Elo, misconception tagging, QuickJS sandbox for generators

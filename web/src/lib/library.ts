@@ -1,4 +1,4 @@
-import { libraryStates, purgeDate, type Folder, type ItemKind, type ItemState, type Library, type Subject, type SubjectColor } from "@halolesson/shared";
+import { libraryStates, purgeDate, type Folder, type ItemKind, type ItemState, type Library, type Subject, type SubjectColor, type Tier } from "@halolesson/shared";
 import { api } from "./api";
 
 export type Entry = { kind: "folder"; item: Folder } | { kind: "subject"; item: Subject };
@@ -22,7 +22,7 @@ export const libraryApi = {
   restore: (kind: ItemKind, id: string) => post("/api/library/restore", { kind, id }),
   createFolder: (name: string, parentId: string | null) => post("/api/folders", { name, parentId }),
   updateFolder: (id: string, fields: { name?: string; color?: string }) => patch(`/api/folders/${id}`, fields),
-  updateSubject: (id: string, fields: { name?: string; description?: string; color?: SubjectColor; gradientStart?: string; gradientEnd?: string; icon?: string | null; level?: number | null; notes?: string; unlockInOrder?: boolean }) =>
+  updateSubject: (id: string, fields: { name?: string; description?: string; color?: SubjectColor; gradientStart?: string; gradientEnd?: string; icon?: string | null; level?: number | null; notes?: string; unlockInOrder?: boolean; unlockTier?: Tier }) =>
     patch(`/api/subjects/${id}`, fields),
 };
 

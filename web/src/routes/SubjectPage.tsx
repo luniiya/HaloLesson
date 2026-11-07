@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { IconArrowLeft, IconBroadcast, IconCheck, IconCircleDashed, IconLock, IconPencil, IconShare, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconBroadcast, IconCheck, IconCircleDashed, IconPencil, IconShare } from "@tabler/icons-react";
 import type { Skill, SubjectDetail } from "@halolesson/shared";
 import { api } from "$lib/api";
 import { useLibraryEvents } from "$lib/events";
 import MapEditor from "../components/MapEditor";
 import ShareDialog from "../components/ShareDialog";
 import SkillMap from "../components/SkillMap";
+import SkillPreview from "../components/SkillPreview";
 import TrackerView from "../components/TrackerView";
 
 export default function SubjectPage() {
@@ -152,25 +153,7 @@ export default function SubjectPage() {
         </div>
       )}
 
-      {!editing && selectedSkill && (
-        <section className="skill-preview map-preview" aria-live="polite">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-black uppercase tracking-wider text-accent-deep">{selectedSkill.locked ? "Locked skill" : "Selected skill"}</p>
-            <h2 className="mt-1 text-lg font-black">{selectedSkill.title}</h2>
-            <p className="mt-1 text-sm font-semibold text-wolf">
-              {selectedSkill.locked ? "Finish a skill linked to this one to open it." : selectedSkill.description || "Practice this skill whenever you want to strengthen it."}
-            </p>
-            {selectedSkill.locked
-              ? <span className="button button-secondary mt-4 gap-2 opacity-70" aria-disabled="true"><IconLock size={18} />Locked</span>
-              : <Link to={`/skills/${selectedSkill.id}/practice`} className="button button-primary mt-4">Practice now</Link>}
-          </div>
-          <div className="shrink-0 text-right">
-            <strong className="block text-2xl font-black text-accent-deep">{Math.round(selectedSkill.mastery * 100)}%</strong>
-            <span className="text-xs font-extrabold uppercase text-wolf">Mastery</span>
-          </div>
-          <button type="button" onClick={() => setSelectedId(null)} className="absolute right-3 top-2 rounded-lg p-2 text-wolf hover:bg-eel hover:text-ink" aria-label="Close skill preview"><IconX size={18} /></button>
-        </section>
-      )}
+      {!editing && selectedSkill && <SkillPreview skill={selectedSkill} unlockTier={detail.subject.unlockTier} onClose={() => setSelectedId(null)} />}
 
       {sharing && <ShareDialog subjectId={subjectId} onClose={() => setSharing(false)} />}
     </div>

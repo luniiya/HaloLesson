@@ -19,7 +19,7 @@ function makeSubject(userId: string) {
         title: "Halves",
         description: "Split in two",
         exercises: [{ type: "free_text", prompt: "1/2 of 4?", answers: ["2"], explanation: "" }],
-        progress: { stars: 2, mastery: 0.6, correctAttempts: 3, totalAttempts: 4, lastPracticedAt: null },
+        progress: { tiersCleared: 2, expertClearedAt: null, mastery: 0.6, correctAttempts: 3, totalAttempts: 4, lastPracticedAt: null },
       }],
     }],
   }]).subjects[0]!;

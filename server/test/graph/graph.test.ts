@@ -4,7 +4,7 @@ import { AgentError, commit, readSubject } from "../../src/agent/ops";
 import { buildExport, importSubjects, parseImport } from "../../src/dataExport";
 import { db } from "../../src/db";
 import { readUpload, toHalolesson } from "../../src/halolessonFile";
-import { getPracticeSession } from "../../src/practice";
+import { startSession } from "../../src/practice";
 import { computeLayout, createRegion, createSkill, DEFAULT_REGION_TITLE, deleteRegion, deleteSkill, linkSkills, unlinkSkills, updateSkill } from "../../src/skillGraph";
 import { createSubject, getSubject, updateSubject } from "../../src/subjects";
 import { makeUser } from "../helpers";
@@ -28,7 +28,7 @@ function chain() {
 
 const skillsOf = (userId: string, subjectId: string) => getSubject(userId, subjectId).units.flatMap((unit) => unit.skills);
 const finish = (userId: string, skillId: string) =>
-  db.run("INSERT OR REPLACE INTO skill_progress (user_id, skill_id, stars, mastery, correct_attempts, total_attempts) VALUES (?, ?, 1, 0.5, 3, 3)", [userId, skillId]);
+  db.run("INSERT OR REPLACE INTO skill_progress (user_id, skill_id, tiers_cleared, mastery, correct_attempts, total_attempts) VALUES (?, ?, 1, 0.5, 3, 3)", [userId, skillId]);
 
 describe("skills and regions", () => {
   test("a first skill makes a default region; linked skills join their neighbour's region", () => {
@@ -128,12 +128,24 @@ describe("unlock in order", () => {
     const locked = () => skillsOf(user.id, subjectId).filter((skill) => skill.locked).map((skill) => skill.id).sort();
     // No start marked: the first skill is the start.
     expect(locked()).toEqual([b, c, d].sort());
-    expect(() => getPracticeSession(user.id, c)).toThrow("locked");
+    expect(() => startSession(user.id, c)).toThrow("locked");
     finish(user.id, a);
     expect(locked()).toEqual([c]);
     updateSkill(user.id, c, { start: true });
     expect(locked()).toEqual([]);
-    expect(getPracticeSession(user.id, c).skillId).toBe(c);
+    // Open now: it fails only for want of exercises.
+    expect(() => startSession(user.id, c)).toThrow("no exercises");
+  });
+
+  test("the subject's unlock tier decides when a skill counts as finished", () => {
+    const { user, subjectId, a, b, d } = chain();
+    updateSubject(user.id, subjectId, { unlockInOrder: true, unlockTier: "medium" });
+    const locked = () => skillsOf(user.id, subjectId).filter((skill) => skill.locked).map((skill) => skill.id);
+    finish(user.id, a);
+    expect(locked()).toContain(b);
+    db.run("UPDATE skill_progress SET tiers_cleared = 2 WHERE user_id = ? AND skill_id = ?", [user.id, a]);
+    expect(locked()).not.toContain(b);
+    expect(locked()).not.toContain(d);
   });
 });
 

@@ -1,5 +1,13 @@
 import {
+  DEFAULT_HEARTS,
+  DEFAULT_SESSION_SIZE,
+  MAX_HEARTS,
+  MAX_SESSION_SIZE,
   isLevel,
+  isTier,
+  MAX_CONCEPT_LENGTH,
+  MAX_CONCEPTS,
+  TIERS,
   isSubjectIcon,
   isSubjectType,
   libraryStates,
@@ -14,6 +22,7 @@ import {
   type ExportKind,
   type ExportFolder,
   type ExportSkill,
+  type Tier,
   type ExportStats,
   type ExportSubject,
   type ImportChoice,
@@ -34,6 +43,7 @@ interface SubjectRow {
   id: string;
   origin_id: string | null;
   unlock_in_order: number;
+  unlock_tier: number;
   type: string;
   level: number | null;
   notes: string;
@@ -54,10 +64,13 @@ interface ExerciseRow {
   prompt: string;
   content_json: string;
   explanation: string;
+  tier: number;
+  concepts_json: string;
 }
 
 interface ProgressRow {
-  stars: number;
+  tiers_cleared: number;
+  expert_cleared_at: string | null;
   mastery: number;
   correct_attempts: number;
   total_attempts: number;
@@ -95,9 +108,11 @@ const lineageOf = (table: "units" | "skills", ids: string[]) =>
 
 function exportExercise(row: ExerciseRow): ExportExercise {
   const content = JSON.parse(row.content_json) as { options?: string[]; correctIndex?: number; answers?: string[] };
+  const concepts = JSON.parse(row.concepts_json) as string[];
+  const shared = { tier: TIERS[row.tier] ?? "easy", ...(concepts.length ? { concepts } : {}) };
   return row.type === "multiple_choice"
-    ? { type: row.type, prompt: row.prompt, options: content.options ?? [], correctIndex: content.correctIndex ?? 0, explanation: row.explanation }
-    : { type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
+    ? { ...shared, type: row.type, prompt: row.prompt, options: content.options ?? [], correctIndex: content.correctIndex ?? 0, explanation: row.explanation }
+    : { ...shared, type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
 }
 
 function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean, ids: FileIds): ExportSubject {
@@ -126,6 +141,7 @@ function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean
     gradientEnd: row.gradient_end,
     icon: isSubjectIcon(row.icon) ? row.icon : null,
     unlockInOrder: row.unlock_in_order === 1,
+    unlockTier: TIERS[row.unlock_tier] ?? "easy",
     units: units.map((unit) => ({
       id: unitFileIds.get(unit.id),
       title: unit.title,
@@ -137,6 +153,8 @@ function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean
           description: skill.description,
           ...(skill.start ? { start: true } : {}),
           ...(linksOf.has(skill.id) ? { links: linksOf.get(skill.id) } : {}),
+          sessionSize: skill.sessionSize,
+          hearts: skill.hearts,
           exercises: db
             .query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE skill_id = ? ORDER BY position, created_at")
             .all(skill.id)
@@ -157,7 +175,8 @@ function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean
             .get(userId, skill.id);
           if (progress) {
             exported.progress = {
-              stars: progress.stars,
+              tiersCleared: progress.tiers_cleared,
+              expertClearedAt: progress.expert_cleared_at,
               mastery: progress.mastery,
               correctAttempts: progress.correct_attempts,
               totalAttempts: progress.total_attempts,
@@ -239,10 +258,23 @@ function strings(value: unknown, where: string): string[] {
   return list(value, where).map((item, index) => text(item, `${where} ${index + 1}`, 500, true));
 }
 
+function parseConcepts(value: unknown, where: string): string[] {
+  if (value === undefined || value === null) return [];
+  const concepts = strings(value, `${where} concept`).map((concept) => {
+    if (concept.length > MAX_CONCEPT_LENGTH) throw new Error(`${where} concepts must be ${MAX_CONCEPT_LENGTH} characters or fewer`);
+    return concept;
+  });
+  const unique = [...new Map(concepts.map((concept) => [concept.toLocaleLowerCase(), concept])).values()];
+  if (unique.length > MAX_CONCEPTS) throw new Error(`${where} can list at most ${MAX_CONCEPTS} concepts`);
+  return unique;
+}
+
 export function parseExercise(value: unknown, where: string): ExportExercise {
   const input = record(value, where);
   const prompt = text(input.prompt, `${where} prompt`, 2000, true);
   const explanation = text(input.explanation, `${where} explanation`, 2000);
+  if (input.tier !== undefined && input.tier !== null && !isTier(input.tier)) throw new Error(`${where} tier must be one of ${TIERS.join(", ")}`);
+  const shared = { tier: isTier(input.tier) ? input.tier : "easy" as const, concepts: parseConcepts(input.concepts, where), explanation };
   if (input.type === "multiple_choice") {
     const options = strings(input.options, `${where} option`);
     const correctIndex = input.correctIndex;
@@ -250,12 +282,12 @@ export function parseExercise(value: unknown, where: string): ExportExercise {
     if (typeof correctIndex !== "number" || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
       throw new Error(`${where} correctIndex must point to one of its options`);
     }
-    return { type: "multiple_choice", prompt, options, correctIndex, explanation };
+    return { ...shared, type: "multiple_choice", prompt, options, correctIndex };
   }
   if (input.type === "free_text") {
     const answers = strings(input.answers, `${where} answer`);
     if (answers.length === 0) throw new Error(`${where} needs at least one accepted answer`);
-    return { type: "free_text", prompt, answers, explanation };
+    return { ...shared, type: "free_text", prompt, answers };
   }
   throw new Error(`${where} type must be multiple_choice or free_text`);
 }
@@ -265,8 +297,11 @@ function parseProgress(value: unknown): ExportSkill["progress"] {
   const input = value as Record<string, unknown>;
   const count = (item: unknown) => (typeof item === "number" && Number.isInteger(item) && item >= 0 ? item : 0);
   const mastery = typeof input.mastery === "number" ? Math.max(0, Math.min(1, input.mastery)) : 0;
+  // Files from before tiers have stars instead: any star meant the skill was finished.
+  const tiersCleared = input.tiersCleared === undefined ? Math.min(1, count(input.stars)) : Math.min(TIERS.length, count(input.tiersCleared));
   return {
-    stars: Math.min(3, count(input.stars)),
+    tiersCleared,
+    expertClearedAt: tiersCleared === TIERS.length ? date(input.expertClearedAt) : null,
     mastery,
     correctAttempts: count(input.correctAttempts),
     totalAttempts: count(input.totalAttempts),
@@ -305,6 +340,16 @@ function parseAttempts(value: unknown): ExportAttempt[] | undefined {
 const FILE_ID = /^[A-Za-z0-9_-]{1,100}$/;
 // Ids are optional (format 1 has none); a malformed one is dropped, not fatal.
 const fileId = (value: unknown) => (typeof value === "string" && FILE_ID.test(value) ? value : undefined);
+
+// Out-of-range skill settings fall back to the defaults instead of failing the import.
+const setting = (value: unknown, max: number) => (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= max ? value : undefined);
+const tierIndex = (tier: Tier | undefined) => Math.max(0, TIERS.indexOf(tier ?? "easy"));
+const tierOf = (exercise: ExportExercise) => tierIndex(exercise.tier);
+const conceptsJson = (exercise: ExportExercise) => JSON.stringify(exercise.concepts ?? []);
+
+function writeSkillSettings(skillId: string, skill: ExportSkill): void {
+  db.run("UPDATE skills SET session_size = ?, hearts = ? WHERE id = ?", [skill.sessionSize ?? DEFAULT_SESSION_SIZE, skill.hearts ?? DEFAULT_HEARTS, skillId]);
+}
 
 const date = (value: unknown) => (typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null);
 const position = (value: unknown, fallback: number) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback);
@@ -345,6 +390,7 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
     gradientEnd: typeof input.gradientEnd === "string" && HEX_COLOR.test(input.gradientEnd) ? input.gradientEnd : "#1cb0f6",
     icon: isSubjectIcon(input.icon) ? input.icon : null,
     unlockInOrder: input.unlockInOrder === true,
+    unlockTier: isTier(input.unlockTier) ? input.unlockTier : "easy",
     folder: folderRef(input.folder, folderCount, where),
     position: position(input.position, index),
     archivedAt: date(input.archivedAt),
@@ -365,6 +411,8 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
             description: text(skill.description, `${skillWhere} description`, 500),
             start: skill.start === true,
             links: Array.isArray(skill.links) ? skill.links.flatMap((link) => fileId(link) ?? []).slice(0, MAX_LINKS_PER_SKILL) : [],
+            sessionSize: setting(skill.sessionSize, MAX_SESSION_SIZE),
+            hearts: setting(skill.hearts, MAX_HEARTS),
             exercises: list(skill.exercises, `${skillWhere} exercises`).map((exercise, index) => ({
               id: fileId((exercise as Record<string, unknown>).id),
               ...parseExercise(exercise, `${skillWhere} exercise ${index + 1}`),
@@ -491,8 +539,8 @@ function writeLinks(subjectId: string, subject: ExportSubject, skillIds: Map<str
 
 function updateFromFile(subjectId: string, subject: ExportSubject) {
   const now = new Date().toISOString();
-  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, unlock_in_order = ?, updated_at = ? WHERE id = ?", [
-    subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, subject.unlockInOrder ? 1 : 0, now, subjectId,
+  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, unlock_in_order = ?, unlock_tier = ?, updated_at = ? WHERE id = ?", [
+    subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, subject.unlockInOrder ? 1 : 0, tierIndex(subject.unlockTier), now, subjectId,
   ]);
   const written = new Map<string, string>();
   type Row = { id: string; lineage: string };
@@ -516,18 +564,19 @@ function updateFromFile(subjectId: string, subject: ExportSubject) {
         skillId = crypto.randomUUID();
         db.run("INSERT INTO skills (id, unit_id, title, description, position, is_start, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [skillId, unitId!, skill.title, skill.description, skillIndex, skill.start ? 1 : 0, skill.id ?? null, now]);
       }
+      writeSkillSettings(skillId, skill);
       kept.skills.add(skillId);
       if (skill.id) written.set(skill.id, skillId);
       skill.exercises.forEach((exercise, exerciseIndex) => {
         let exerciseId = exercise.id ? exercises.get(exercise.id) : undefined;
         if (exerciseId) {
-          db.run("UPDATE exercises SET skill_id = ?, type = ?, prompt = ?, content_json = ?, explanation = ?, position = ? WHERE id = ?", [
-            skillId!, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, exerciseIndex, exerciseId,
+          db.run("UPDATE exercises SET skill_id = ?, type = ?, prompt = ?, content_json = ?, explanation = ?, tier = ?, concepts_json = ?, position = ? WHERE id = ?", [
+            skillId!, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, tierOf(exercise), conceptsJson(exercise), exerciseIndex, exerciseId,
           ]);
         } else {
           exerciseId = crypto.randomUUID();
-          db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-            exerciseId, skillId!, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, exerciseIndex, exercise.id ?? null, now,
+          db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, tier, concepts_json, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+            exerciseId, skillId!, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, tierOf(exercise), conceptsJson(exercise), exerciseIndex, exercise.id ?? null, now,
           ]);
         }
         kept.exercises.add(exerciseId);
@@ -596,8 +645,8 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
       const folder = subject.folder ?? null;
       const at = subject.position ?? subjectIndex;
       db.run(
-        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, unlock_in_order, folder_id, position, archived_at, origin_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, subject.unlockInOrder ? 1 : 0, folder === null ? destination : folderIds.get(folder)!, folder === null ? offset + at : at, subject.archivedAt ?? null, subject.id ?? null, now, now],
+        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, unlock_in_order, unlock_tier, folder_id, position, archived_at, origin_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, subject.unlockInOrder ? 1 : 0, tierIndex(subject.unlockTier), folder === null ? destination : folderIds.get(folder)!, folder === null ? offset + at : at, subject.archivedAt ?? null, subject.id ?? null, now, now],
       );
       const history = subject.levelHistory?.length ? subject.levelHistory : subject.level != null ? [{ level: subject.level, at: now }] : [];
       for (const point of history) recordLevel(userId, subjectId, point.level, point.at);
@@ -612,12 +661,13 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
           db.run("INSERT INTO skills (id, unit_id, title, description, position, is_start, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
             skillId, unitId, skill.title, skill.description, skillIndex, skill.start ? 1 : 0, skill.id ?? null, now,
           ]);
+          writeSkillSettings(skillId, skill);
           if (skill.id) written.set(skill.id, skillId);
           skill.exercises.forEach((exercise, exerciseIndex) => {
             const exerciseId = crypto.randomUUID();
             db.run(
-              "INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              [exerciseId, skillId, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, exerciseIndex, exercise.id ?? null, now],
+              "INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, tier, concepts_json, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              [exerciseId, skillId, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, tierOf(exercise), conceptsJson(exercise), exerciseIndex, exercise.id ?? null, now],
             );
             for (const attempt of exercise.attempts ?? []) {
               db.run(
@@ -628,8 +678,8 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
           });
           if (skill.progress && skill.progress.totalAttempts > 0) {
             db.run(
-              "INSERT INTO skill_progress (user_id, skill_id, stars, mastery, correct_attempts, total_attempts, last_practiced_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              [userId, skillId, skill.progress.stars, skill.progress.mastery, Math.min(skill.progress.correctAttempts, skill.progress.totalAttempts), skill.progress.totalAttempts, skill.progress.lastPracticedAt],
+              "INSERT INTO skill_progress (user_id, skill_id, tiers_cleared, expert_cleared_at, mastery, correct_attempts, total_attempts, last_practiced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              [userId, skillId, skill.progress.tiersCleared, skill.progress.expertClearedAt, skill.progress.mastery, Math.min(skill.progress.correctAttempts, skill.progress.totalAttempts), skill.progress.totalAttempts, skill.progress.lastPracticedAt],
             );
           }
         });

@@ -171,6 +171,8 @@ export interface Subject {
   // Skills open one step at a time: a skill is locked until it is a start
   // skill or linked to a finished one (see skillLocks).
   unlockInOrder: boolean;
+  // The tier a skill must clear to count as finished and open its links.
+  unlockTier: Tier;
 }
 
 export interface Folder {
@@ -239,9 +241,17 @@ export interface Skill {
   description: string;
   position: number;
   createdAt: string;
-  stars: number;
+  // How many tiers are cleared, 0 to 4, in TIERS order (see isFinished).
+  tiersCleared: number;
+  // Gold, silver or copper once Expert is cleared; fades with time (see medalFor).
+  medal: Medal | null;
   mastery: number;
   lastPracticedAt: string | null;
+  // Skill settings: questions per session and hearts per session.
+  sessionSize: number;
+  hearts: number;
+  // Exercises in each tier's pool, in TIERS order.
+  tierCounts: number[];
   // Where the skill sits on the subject map, in map units (MAP_SPACING apart
   // for neighbours). Computed by the server; null only before the first layout.
   x: number | null;
@@ -267,17 +277,46 @@ export const MAP_SPACING = 230;
 export const MAP_Y_SCALE = 0.72;
 export const MAX_LINKS_PER_SKILL = 24;
 
-// A skill is finished once it has at least one star.
-export const isFinished = (skill: Pick<Skill, "stars">) => skill.stars > 0;
+// Every skill has four tiers, cleared in order: a tier opens once the one
+// before it is cleared. Each tier has its own pool of exercises.
+export const TIERS = ["easy", "medium", "hard", "expert"] as const;
+export type Tier = (typeof TIERS)[number];
+export const TIER_LABELS: Record<Tier, string> = { easy: "Easy", medium: "Medium", hard: "Hard", expert: "Expert" };
+
+export function isTier(value: unknown): value is Tier {
+  return typeof value === "string" && (TIERS as readonly string[]).includes(value);
+}
+
+// Skill settings: defaults and bounds.
+export const DEFAULT_SESSION_SIZE = 10;
+export const MAX_SESSION_SIZE = 50;
+export const DEFAULT_HEARTS = 3;
+export const MAX_HEARTS = 10;
+
+// Clearing Expert makes a skill gold. Without another Expert clear it fades:
+// silver after MEDAL_SILVER_DAYS, copper after MEDAL_COPPER_DAYS.
+export type Medal = "gold" | "silver" | "copper";
+export const MEDAL_SILVER_DAYS = 60;
+export const MEDAL_COPPER_DAYS = 365;
+
+export function medalFor(expertClearedAt: string | null, now = Date.now()): Medal | null {
+  if (!expertClearedAt) return null;
+  const days = (now - Date.parse(expertClearedAt)) / 86_400_000;
+  return days >= MEDAL_COPPER_DAYS ? "copper" : days >= MEDAL_SILVER_DAYS ? "silver" : "gold";
+}
+
+// A skill is finished (and opens the skills linked to it) once it has cleared
+// the subject's unlock tier, Easy by default.
+export const isFinished = (skill: Pick<Skill, "tiersCleared">, unlockTier: Tier = "easy") => skill.tiersCleared > TIERS.indexOf(unlockTier);
 
 // Which skills are locked when unlocking in order. Open: start skills (the
 // first skill when none is marked), finished skills, and every skill linked
 // to a finished one.
-export function skillLocks(skills: Array<Pick<Skill, "id" | "stars" | "start">>, links: Array<[string, string]>): Set<string> {
+export function skillLocks(skills: Array<Pick<Skill, "id" | "tiersCleared" | "start">>, links: Array<[string, string]>, unlockTier: Tier = "easy"): Set<string> {
   const open = new Set<string>();
   const starts = skills.filter((skill) => skill.start);
   for (const skill of starts.length ? starts : skills.slice(0, 1)) open.add(skill.id);
-  const finished = new Set(skills.filter(isFinished).map((skill) => skill.id));
+  const finished = new Set(skills.filter((skill) => isFinished(skill, unlockTier)).map((skill) => skill.id));
   for (const id of finished) open.add(id);
   for (const [a, b] of links) {
     if (finished.has(a)) open.add(b);
@@ -302,15 +341,11 @@ export interface SharedSubject {
 
 export type ExerciseType = "multiple_choice" | "free_text";
 
-export interface Exercise {
-  id: string;
-  skillId: string;
-  type: ExerciseType;
-  prompt: string;
-  content: Record<string, unknown>;
-  explanation: string;
-  position: number;
-}
+// What an exercise tests, as short tags ("chain rule", "sign of the result").
+// Wrong answers count against these concepts, which is how the server tells
+// what the learner struggles with.
+export const MAX_CONCEPTS = 8;
+export const MAX_CONCEPT_LENGTH = 60;
 
 export interface PracticeExercise {
   id: string;
@@ -319,20 +354,60 @@ export interface PracticeExercise {
   options: string[];
 }
 
+export type SessionStatus = "active" | "cleared" | "failed" | "quit";
+
+// A practice session on one tier of a skill. The server keeps it: hearts,
+// the queue of exercises (wrong ones come back at the end) and the outcome.
 export interface PracticeSession {
+  id: string;
   skillId: string;
   skillTitle: string;
   subjectId: string;
   subjectName: string;
-  exercises: PracticeExercise[];
+  tier: Tier;
+  hearts: number;
+  heartsLeft: number;
+  status: SessionStatus;
+  // Exercises still to answer, in order; the first is the current one.
+  queue: PracticeExercise[];
+  // Questions answered correctly so far, out of `total` distinct exercises.
+  done: number;
+  total: number;
+  answered: number;
+  correct: number;
 }
 
 export interface AttemptResult {
   correct: boolean;
   correctAnswer: string;
   explanation: string;
-  mastery: number;
-  stars: number;
+  // A wrong exercise goes back to the end of the queue.
+  requeued: boolean;
+  session: PracticeSession;
+  // When the session ends: what changed on the skill.
+  tiersCleared: number;
+  medal: Medal | null;
+}
+
+// How the learner does on one concept tag of a skill, worst first.
+export interface ConceptStruggle {
+  concept: string;
+  answered: number;
+  wrong: number;
+  // Share of answers on this concept that were wrong, 0 to 1.
+  failRate: number;
+  // Median time per answer on this concept, null when unknown.
+  medianMs: number | null;
+}
+
+// The exercises a skill's learner finds hardest right now, and why.
+export interface SkillInsight {
+  skillId: string;
+  tiersCleared: number;
+  medal: Medal | null;
+  expertClearedAt: string | null;
+  concepts: ConceptStruggle[];
+  hardest: Array<{ exerciseId: string; prompt: string; tier: Tier; concepts: string[]; answered: number; wrong: number; recall: number | null; lastWrong: boolean }>;
 }
 
 export interface ExportStats {
@@ -353,6 +428,9 @@ export interface ExportAttempt {
 export interface ExportExercise {
   // Stable across copies (format 2): importing a file again can update instead of duplicating.
   id?: string;
+  // Missing in older files: easy.
+  tier?: Tier;
+  concepts?: string[];
   type: ExerciseType;
   prompt: string;
   options?: string[];
@@ -371,8 +449,11 @@ export interface ExportSkill {
   start?: boolean;
   // File ids of linked skills in the same subject. Each link may be listed on one or both ends.
   links?: string[];
+  sessionSize?: number;
+  hearts?: number;
   exercises: ExportExercise[];
-  progress?: { stars: number; mastery: number; correctAttempts: number; totalAttempts: number; lastPracticedAt: string | null };
+  // Older files have stars (0-3) instead of tiersCleared: any star means Easy is cleared.
+  progress?: { tiersCleared: number; expertClearedAt: string | null; mastery: number; correctAttempts: number; totalAttempts: number; lastPracticedAt: string | null };
 }
 
 export interface ExportUnit {
@@ -397,6 +478,7 @@ export interface ExportSubject {
   gradientEnd: string;
   icon?: SubjectIcon | null;
   unlockInOrder?: boolean;
+  unlockTier?: Tier;
   // Library placement, only in full backups (a shared subject lands at the
   // viewer's top level). `folder` indexes ExportFile.folders.
   folder?: number | null;
@@ -552,7 +634,8 @@ export interface StatsSkill {
   id: string;
   title: string;
   unitTitle: string;
-  stars: number;
+  tiersCleared: number;
+  medal: Medal | null;
   mastery: number;
   answered: number;
   correct: number;

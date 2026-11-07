@@ -1,4 +1,4 @@
-import { libraryStates, STATS_RANGES, type Stats, type StatsDay, type StatsItem, type StatsSkill, type Subject } from "@halolesson/shared";
+import { libraryStates, medalFor, STATS_RANGES, TIERS, type Stats, type StatsDay, type StatsItem, type StatsSkill, type Subject } from "@halolesson/shared";
 import { db } from "./db";
 import { getLibrary } from "./library";
 import { getSubject } from "./subjects";
@@ -27,7 +27,8 @@ interface SkillRow {
   title: string;
   unit_title: string;
   subject_id: string;
-  stars: number | null;
+  tiers_cleared: number | null;
+  expert_cleared_at: string | null;
   mastery: number | null;
   total_attempts: number | null;
   last_practiced_at: string | null;
@@ -77,7 +78,7 @@ export function getStats(userId: string, options: StatsOptions = {}): Stats {
     WHERE attempts.user_id = ? AND units.subject_id IN (${inScope}) ORDER BY attempts.created_at
   `).all(userId, ...ids) : [];
   const skills = ids.length ? db.query<SkillRow, string[]>(`
-    SELECT skills.id, skills.title, units.title AS unit_title, units.subject_id, skill_progress.stars, skill_progress.mastery,
+    SELECT skills.id, skills.title, units.title AS unit_title, units.subject_id, skill_progress.tiers_cleared, skill_progress.expert_cleared_at, skill_progress.mastery,
       skill_progress.total_attempts, skill_progress.last_practiced_at
     FROM skills JOIN units ON units.id = skills.unit_id
     LEFT JOIN skill_progress ON skill_progress.skill_id = skills.id AND skill_progress.user_id = ?
@@ -175,7 +176,8 @@ export function getStats(userId: string, options: StatsOptions = {}): Stats {
     id: skill.id,
     title: skill.title,
     unitTitle: skill.unit_title,
-    stars: skill.stars ?? 0,
+    tiersCleared: skill.tiers_cleared ?? 0,
+    medal: medalFor(skill.expert_cleared_at),
     mastery: round(skill.mastery ?? 0),
     ...tally(ranged.filter((row) => row.skill_id === skill.id)),
     lastPracticedAt: skill.last_practiced_at,
@@ -193,7 +195,7 @@ export function getStats(userId: string, options: StatsOptions = {}): Stats {
       longestStreak,
       skillCount: skills.length,
       skillsStarted: skills.filter((skill) => (skill.total_attempts ?? 0) > 0).length,
-      skillsMastered: skills.filter((skill) => skill.stars === 3).length,
+      skillsMastered: skills.filter((skill) => skill.tiers_cleared === TIERS.length).length,
       ratings: ratings.filter((rating) => inRange(rating.created_at)).length,
       firstActivityAt,
       lastActivityAt,

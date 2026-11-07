@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { IconLink, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
-import type { Skill, SubjectDetail } from "@halolesson/shared";
+import { MAX_HEARTS, MAX_SESSION_SIZE, TIER_LABELS, TIERS, type Skill, type SubjectDetail } from "@halolesson/shared";
 import { api } from "$lib/api";
 import Button from "./Button";
 import { regionColors } from "./SkillMap";
@@ -40,6 +40,14 @@ export default function MapEditor({ detail, selected, linkMode, onDetail, onSele
   }
 
   const subjectId = detail.subject.id;
+  function patchSubject(fields: object) {
+    setError("");
+    busy.wrap(api(`/api/subjects/${subjectId}`, { method: "PATCH", body: JSON.stringify(fields) }))
+      .then(() => api<SubjectDetail>(`/api/subjects/${subjectId}`))
+      .then(onDetail)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "That didn't work"));
+  }
+
   return (
     <aside className="flex flex-col gap-4" aria-label="Edit map">
       <div className="map-panel">
@@ -49,14 +57,10 @@ export default function MapEditor({ detail, selected, linkMode, onDetail, onSele
         </div>
         <UnlockInOrderToggle
           checked={detail.subject.unlockInOrder}
+          tier={detail.subject.unlockTier}
           disabled={busy.on}
-          onChange={(unlockInOrder) => {
-            setError("");
-            busy.wrap(api(`/api/subjects/${subjectId}`, { method: "PATCH", body: JSON.stringify({ unlockInOrder }) }))
-              .then(() => api<SubjectDetail>(`/api/subjects/${subjectId}`))
-              .then(onDetail)
-              .catch((cause) => setError(cause instanceof Error ? cause.message : "That didn't work"));
-          }}
+          onChange={(unlockInOrder) => patchSubject({ unlockInOrder })}
+          onTierChange={(unlockTier) => patchSubject({ unlockTier })}
         />
         {error && <p role="alert" className="notice-error">{error}</p>}
       </div>
@@ -190,6 +194,11 @@ function SkillEditor({ detail, skill, linkMode, onLinkMode, onClose, run }: {
           <span className="block text-xs font-semibold leading-5 text-wolf">Where learning begins. Without one, the first skill is the start.</span>
         </span>
       </label>
+      <div className="grid grid-cols-2 gap-3">
+        <SettingInput label="Questions per session" value={skill.sessionSize} max={MAX_SESSION_SIZE} onSave={(sessionSize) => void patch({ sessionSize })} />
+        <SettingInput label="Hearts" value={skill.hearts} max={MAX_HEARTS} onSave={(hearts) => void patch({ hearts })} />
+      </div>
+      <p className="-mt-1 text-xs font-semibold leading-5 text-wolf">Exercises per tier: {TIERS.map((tier, index) => `${TIER_LABELS[tier]} ${skill.tierCounts[index]}`).join(" · ")}</p>
 
       <div>
         <h3 className="map-panel-title">Links</h3>
@@ -221,6 +230,28 @@ function SkillEditor({ detail, skill, linkMode, onLinkMode, onClose, run }: {
         <button type="button" className="flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-extrabold text-cardinal hover:bg-eel" onClick={() => setConfirming(true)}><IconTrash size={17} />Delete skill</button>
       )}
     </div>
+  );
+}
+
+// A whole-number skill setting, saved when the field loses focus.
+function SettingInput({ label, value, max, onSave }: { label: string; value: number; max: number; onSave: (value: number) => void }) {
+  return (
+    <label className="form-label">{label}
+      <input
+        type="number"
+        className="form-input py-2"
+        min={1}
+        max={max}
+        defaultValue={value}
+        key={value}
+        onBlur={(event) => {
+          const next = Number(event.target.value);
+          if (Number.isInteger(next) && next >= 1 && next <= max && next !== value) onSave(next);
+          else event.target.value = String(value);
+        }}
+        onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+      />
+    </label>
   );
 }
 
