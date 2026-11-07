@@ -485,7 +485,10 @@ function putSkill(userId: string, input: Record<string, unknown>) {
     for (const [linkIndex, other] of list(input.linkTo, "skill.linkTo").entries()) linkSkills(userId, skillId, requiredId(other, `skill.linkTo[${linkIndex}]`));
   }
   const crossSubject = moved && ownedUnit(userId, current.unit_id).subject_id !== subjectId;
-  return { subjectId: crossSubject ? null : subjectId, result: { id: skillId, exerciseIds } };
+  // Every skill needs all four tiers; tell the agent which are still empty.
+  const filled = new Set(db.query<{ tier: number }, [string]>("SELECT DISTINCT tier FROM exercises WHERE skill_id = ?").all(skillId).map((row) => row.tier));
+  const missingTiers = TIERS.filter((_, index) => !filled.has(index));
+  return { subjectId: crossSubject ? null : subjectId, result: { id: skillId, exerciseIds, missingTiers } };
 }
 
 function putFolder(userId: string, input: Record<string, unknown>) {

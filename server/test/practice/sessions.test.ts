@@ -132,6 +132,7 @@ describe("agent and files", () => {
     const read = readSubject(user.id, subjectId).units[0]!.skills[0]!;
     expect(read).toMatchObject({ sessionSize: 5, hearts: 4, tiersCleared: 0, medal: null });
     expect(read.exercises[0]).toMatchObject({ tier: "hard", concepts: ["limits"] });
+    expect(run(user.id, { op: "putSkill", skill: { id: skillId } }).missingTiers).toEqual(["easy", "medium", "expert"]);
     expect(() => run(user.id, { op: "putSkill", skill: { id: skillId, hearts: 0 } })).toThrow("Hearts");
     expect(() => run(user.id, { op: "putSkill", skill: { id: skillId, exercises: [mc("q", "legendary")] } })).toThrow("tier");
     submitAttempt(user.id, exerciseIds[0]!, 0, 2000);

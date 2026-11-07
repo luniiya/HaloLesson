@@ -43,3 +43,7 @@ Related: [[skill-graph-vision]], [[subject-path-ui]], [[statistics]]
 - Not done yet: procedural generators (QuickJS sandbox idea), more answer types, the Duolingo-style start flag.
 
 *(as of 2026-11-07)* User: the unlock-in-order setting lives only in subject settings (removed from the map editor), and new subjects default to unlockInOrder true with unlockTier hard (`DEFAULT_UNLOCK_IN_ORDER` and `DEFAULT_UNLOCK_TIER` in shared, used by createSubject and the agent putSubject). Existing subjects and imported files keep their stored values. Open issue: a skill with no Hard exercises can never count as finished under Hard, so its links stay locked.
+
+*(as of 2026-11-07)* Decision: no special handling for empty tiers. User: "all skills will have a hard question that's ez". The connect prompt already tells agents to fill all four tiers.
+
+*(as of 2026-11-07)* Rule from the user: every skill must have exercises in all four tiers. Agents are told this in the prompt and MCP instructions, and putSkill returns `missingTiers` (the tiers still empty) so they notice. The server doesn't reject a skill with empty tiers, so agents can still build a skill one tier at a time.
