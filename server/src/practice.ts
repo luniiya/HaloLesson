@@ -1,5 +1,6 @@
-import { isTier, medalFor, TIER_LABELS, TIERS, type AttemptResult, type PracticeExercise, type PracticeSession, type SessionStatus } from "@halolesson/shared";
+import { isTier, medalFor, TIER_LABELS, TIERS, type AttemptResult, type ExerciseType, type PracticeExercise, type PracticeSession, type SessionStatus } from "@halolesson/shared";
 import { db } from "./db";
+import { checkAnswer, practiceFields } from "./exercises";
 import { pickExercises } from "./recommender";
 import { isSkillLocked } from "./skillGraph";
 
@@ -22,7 +23,7 @@ interface SkillRow {
 interface ExerciseRow {
   id: string;
   skill_id: string;
-  type: "multiple_choice" | "free_text";
+  type: ExerciseType;
   prompt: string;
   content_json: string;
   explanation: string;
@@ -65,14 +66,9 @@ const progressOf = (userId: string, skillId: string): ProgressRow =>
   db.query<ProgressRow, [string, string]>("SELECT mastery, correct_attempts, total_attempts, tiers_cleared, expert_cleared_at FROM skill_progress WHERE user_id = ? AND skill_id = ?").get(userId, skillId)
   ?? { mastery: 0, correct_attempts: 0, total_attempts: 0, tiers_cleared: 0, expert_cleared_at: null };
 
-function toPracticeExercise(row: ExerciseRow): PracticeExercise {
-  const content = JSON.parse(row.content_json) as { options?: unknown };
-  return {
-    id: row.id,
-    type: row.type,
-    prompt: row.prompt,
-    options: row.type === "multiple_choice" && Array.isArray(content.options) ? content.options.filter((option): option is string => typeof option === "string") : [],
-  };
+// Shuffled items are seeded by the session, so reloading shows the same order.
+function toPracticeExercise(row: ExerciseRow, sessionId: string): PracticeExercise {
+  return { id: row.id, type: row.type, prompt: row.prompt, ...practiceFields(row.type, row.content_json, sessionId + row.id) };
 }
 
 function toSession(row: SessionRow, skill: SkillRow): PracticeSession {
@@ -91,7 +87,7 @@ function toSession(row: SessionRow, skill: SkillRow): PracticeSession {
     heartsLeft: row.hearts_left,
     status: row.status,
     // Exercises deleted mid-session drop out of the queue.
-    queue: queue.flatMap((id) => (rows.has(id) ? [toPracticeExercise(rows.get(id)!)] : [])),
+    queue: queue.flatMap((id) => (rows.has(id) ? [toPracticeExercise(rows.get(id)!, row.id)] : [])),
     done: row.done,
     total: row.total,
     answered: row.answered,
@@ -141,18 +137,6 @@ export function quitSession(userId: string, sessionId: string): PracticeSession 
   return getSession(userId, sessionId);
 }
 
-function check(exercise: ExerciseRow, answer: unknown): { correct: boolean; correctAnswer: string } {
-  const content = JSON.parse(exercise.content_json) as { options?: unknown; correctIndex?: unknown; answers?: unknown };
-  if (exercise.type === "multiple_choice") {
-    const options = Array.isArray(content.options) ? content.options : [];
-    const correctIndex = typeof content.correctIndex === "number" ? content.correctIndex : -1;
-    return { correct: typeof answer === "number" && answer === correctIndex, correctAnswer: typeof options[correctIndex] === "string" ? options[correctIndex] : "" };
-  }
-  const answers = Array.isArray(content.answers) ? content.answers.filter((item): item is string => typeof item === "string") : [];
-  const normalize = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-  return { correct: typeof answer === "string" && answers.some((item) => normalize(item) === normalize(answer)), correctAnswer: answers[0] ?? "" };
-}
-
 // Longer than this, the learner walked away: the time isn't recorded.
 const MAX_ANSWER_MS = 30 * 60 * 1000;
 
@@ -164,7 +148,7 @@ export function answerSession(userId: string, sessionId: string, exerciseId: unk
   if (queue[0] !== exerciseId) throw new Error("That isn't the current question");
   const exercise = db.query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE id = ?").get(queue[0]);
   if (!exercise) throw new Error("Exercise not found");
-  const { correct, correctAnswer } = check(exercise, answer);
+  const { correct, correctAnswer } = checkAnswer(exercise.type, exercise.prompt, exercise.content_json, answer);
   const retry = Boolean(db.query("SELECT 1 FROM attempts WHERE session_id = ? AND exercise_id = ?").get(sessionId, exercise.id));
   const duration = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0 && durationMs <= MAX_ANSWER_MS ? Math.round(durationMs) : null;
 

@@ -9,6 +9,8 @@
   --accent: #7c5cff;
   --accent-shade: color-mix(in oklab, var(--accent) 90%, black);
   --accent-dark: color-mix(in oklab, var(--accent) 70%, black);
+  /* Desktop sidebar width (AppLayout narrows it when collapsed). */
+  --sidebar: 15rem;
   /* Selected and active states; set per user like the accent. */
   --secondary: #ec4f9a;
 }
@@ -112,6 +114,25 @@
 
   .nav-item-active {
     @apply border-2 border-secondary bg-secondary-pale text-secondary;
+  }
+
+  /* Desktop sidebar; collapsed it is a rail of single icons. --sidebar also
+     offsets the main content and the full-page skill map. */
+  .sidebar {
+    @apply w-(--sidebar) overflow-hidden whitespace-nowrap p-5;
+    transition: width 200ms ease, padding 200ms ease;
+  }
+
+  .sidebar-collapsed {
+    --sidebar: 5rem;
+  }
+
+  .sidebar-collapsed .sidebar {
+    @apply px-2.5;
+  }
+
+  .sidebar-collapsed .sidebar .nav-item {
+    @apply justify-center px-0;
   }
 
   .form-label {
@@ -567,6 +588,47 @@
 
   .practice-option:has(input:focus-visible) {
     @apply outline-3 outline-offset-3 outline-secondary;
+  }
+
+  /* Order and match items. */
+  .practice-chip {
+    @apply flex items-center gap-2.5 rounded-2xl border-2 border-swan bg-surface px-4 py-3 text-left text-base font-extrabold text-ink shadow-[0_3px_0_var(--color-swan)] transition hover:bg-eel disabled:cursor-default disabled:hover:bg-surface;
+  }
+
+  .practice-chip:focus-visible {
+    @apply outline-3 outline-offset-3 outline-secondary;
+  }
+
+  .practice-chip-selected {
+    @apply border-secondary bg-secondary-pale text-secondary shadow-[0_3px_0_var(--color-secondary-deep)];
+  }
+
+  .practice-chip-paired {
+    border-color: var(--pair);
+    background: color-mix(in srgb, var(--pair) 14%, var(--color-surface));
+    box-shadow: 0 3px 0 var(--pair);
+  }
+
+  .practice-chip-placed {
+    @apply border-secondary shadow-[0_3px_0_var(--color-secondary-deep)];
+  }
+
+  .practice-chip-number {
+    @apply grid size-6 shrink-0 place-items-center rounded-md bg-swan text-xs font-black text-ink;
+  }
+
+  .practice-chip-paired .practice-chip-number {
+    background: var(--pair);
+    color: white;
+  }
+
+  .practice-order-line {
+    @apply flex min-h-16 flex-wrap items-center gap-3 border-b-2 border-swan pb-5;
+  }
+
+  .practice-blank {
+    @apply mx-1 inline-block min-w-[4ch] rounded-lg border-b-4 border-secondary bg-secondary-pale px-2 text-center align-baseline text-secondary outline-none focus:bg-eel disabled:opacity-80;
+    line-height: 1.4;
   }
 
   .practice-feedback {
@@ -1163,7 +1225,7 @@
   /* The subject page: the map fills the content area (under the mobile
      header and bottom bar); everything else floats above it. */
   .subject-map-page {
-    @apply fixed inset-0 md:left-60;
+    @apply fixed inset-0 md:left-(--sidebar);
     --map-top: 4.75rem;
     --map-bottom: calc(5.25rem + env(safe-area-inset-bottom));
   }

@@ -26,6 +26,7 @@
 - [x] Add customizable per-subject gradients that distribute colors across the skill path
 - [x] Add mastery stars and a distinctive gold state for fully perfected skills
 - [x] Build the practice player with progress, multiple-choice and free-text exercises, hidden corrections, and result feedback
+- [x] More answer types: order, match pairs and fill in the blanks (web player, agent ops/MCP/prompt, export, tests)
 - [x] Add the future AI lesson-generation entry point and copy-prompt interaction placeholder
 - [x] Use Tabler icons for interface icons instead of ASCII arrows or ad-hoc glyphs
 - [x] Rebuild subject and skill nodes as shared chunky 3D Duolingo level buttons (straight-sided ledge, gloss, hover lift, mastery progress ring)

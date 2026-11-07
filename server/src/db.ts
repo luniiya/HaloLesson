@@ -60,7 +60,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS exercises (
     id TEXT PRIMARY KEY,
     skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('multiple_choice', 'free_text')),
+    type TEXT NOT NULL,
     prompt TEXT NOT NULL,
     content_json TEXT NOT NULL DEFAULT '{}',
     explanation TEXT NOT NULL DEFAULT '',
@@ -269,6 +269,25 @@ if (!columnsOf("subjects").includes("unlock_in_order")) db.exec("ALTER TABLE sub
 // Skill settings decide the questions and hearts per session.
 if (!columnsOf("exercises").includes("tier")) db.exec("ALTER TABLE exercises ADD COLUMN tier INTEGER NOT NULL DEFAULT 0");
 if (!columnsOf("exercises").includes("concepts_json")) db.exec("ALTER TABLE exercises ADD COLUMN concepts_json TEXT NOT NULL DEFAULT '[]'");
+
+// More exercise types: the type list used to be a CHECK on the table, which
+// SQLite can't drop, so the table is rebuilt once without it. The server
+// validates types itself (parseExercise).
+const exercisesSql = db.query<{ sql: string }, []>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exercises'").get()?.sql ?? "";
+if (exercisesSql.includes("CHECK (type IN")) {
+  const indexes = db.query<{ sql: string }, []>("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'exercises' AND sql IS NOT NULL").all();
+  // Off so dropping the old table doesn't cascade to the attempts on it.
+  db.exec("PRAGMA foreign_keys = OFF");
+  db.transaction(() => {
+    db.exec(exercisesSql.replace(/CHECK \(type IN \([^)]*\)\)/, "").replace(/CREATE TABLE (IF NOT EXISTS )?"?exercises"?/, "CREATE TABLE exercises_new"));
+    const columns = columnsOf("exercises").join(", ");
+    db.exec(`INSERT INTO exercises_new (${columns}) SELECT ${columns} FROM exercises`);
+    db.exec("DROP TABLE exercises");
+    db.exec("ALTER TABLE exercises_new RENAME TO exercises");
+    for (const index of indexes) db.exec(index.sql);
+  })();
+  db.exec("PRAGMA foreign_keys = ON");
+}
 if (!columnsOf("skills").includes("session_size")) db.exec("ALTER TABLE skills ADD COLUMN session_size INTEGER NOT NULL DEFAULT 10");
 if (!columnsOf("skills").includes("hearts")) db.exec("ALTER TABLE skills ADD COLUMN hearts INTEGER NOT NULL DEFAULT 3");
 if (!columnsOf("skill_progress").includes("tiers_cleared")) {

@@ -351,7 +351,14 @@ export interface SharedSubject {
   units: Array<{ title: string; description: string; skills: Array<{ title: string; description: string; exerciseCount: number }> }>;
 }
 
-export type ExerciseType = "multiple_choice" | "free_text";
+// multiple_choice: pick one option. free_text: type the answer. order: put
+// items in sequence. match: pair each left item with a right one.
+// fill_blanks: type the missing words where the prompt has BLANK.
+export const EXERCISE_TYPES = ["multiple_choice", "free_text", "order", "match", "fill_blanks"] as const;
+export type ExerciseType = (typeof EXERCISE_TYPES)[number];
+
+// Marks a gap in a fill_blanks prompt.
+export const BLANK = "___";
 
 // What an exercise tests, as short tags ("chain rule", "sign of the result").
 // Wrong answers count against these concepts, which is how the server tells
@@ -363,7 +370,11 @@ export interface PracticeExercise {
   id: string;
   type: ExerciseType;
   prompt: string;
+  // multiple_choice: the options. order: the items, shuffled. match: the right
+  // column, shuffled. Empty otherwise.
   options: string[];
+  // match only: the left column, in order.
+  left?: string[];
 }
 
 export type SessionStatus = "active" | "cleared" | "failed" | "quit";
@@ -448,6 +459,12 @@ export interface ExportExercise {
   options?: string[];
   correctIndex?: number;
   answers?: string[];
+  // order: the items in the right order.
+  items?: string[];
+  // match: [left, right] pairs.
+  pairs?: Array<[string, string]>;
+  // fill_blanks: accepted answers for each BLANK in the prompt, in order.
+  blanks?: string[][];
   explanation: string;
   // Full backups only.
   attempts?: ExportAttempt[];

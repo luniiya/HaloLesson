@@ -1,4 +1,4 @@
-import { APP_VERSION, DEFAULT_HEARTS, DEFAULT_SESSION_SIZE, LEVEL_LABELS, MAX_CONCEPTS, MAX_HEARTS, MAX_SESSION_SIZE, TIERS, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_ICONS } from "@halolesson/shared";
+import { APP_VERSION, BLANK, DEFAULT_HEARTS, EXERCISE_TYPES, DEFAULT_SESSION_SIZE, LEVEL_LABELS, MAX_CONCEPTS, MAX_HEARTS, MAX_SESSION_SIZE, TIERS, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_ICONS } from "@halolesson/shared";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -11,11 +11,14 @@ const exerciseSchema = {
     id: { type: "string", description: "Existing exercise id to update in place; omit to create" },
     tier: { type: "string", enum: [...TIERS], description: "Which tier's pool it belongs to (default easy). Each tier needs its own exercises" },
     concepts: { type: "array", items: { type: "string" }, description: `Up to ${MAX_CONCEPTS} short tags for what it tests ("chain rule", "sign error"). Reuse the same tags across exercises: wrong answers count against them` },
-    type: { type: "string", enum: ["multiple_choice", "free_text"] },
+    type: { type: "string", enum: [...EXERCISE_TYPES] },
     prompt: { type: "string", description: "Math in LaTeX between $...$ (inline) or $$...$$ (display); options and explanation render it too" },
     options: { type: "array", items: { type: "string" }, description: "multiple_choice: 2 or more options" },
     correctIndex: { type: "integer", description: "multiple_choice: index of the right option" },
     answers: { type: "array", items: { type: "string" }, description: "free_text: every accepted answer (case and spacing ignored)" },
+    items: { type: "array", items: { type: "string" }, description: "order: 2 or more items in the right order; the learner sees them shuffled" },
+    pairs: { type: "array", items: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 2 }, description: "match: 2 or more [left, right] pairs, left items all different; the right column is shuffled" },
+    blanks: { type: "array", items: { type: "array", items: { type: "string" } }, description: `fill_blanks: for each ${BLANK} in the prompt, in order, every accepted answer` },
     explanation: { type: "string", description: "Why the answer is right; shown after answering" },
   },
   required: ["type", "prompt"],

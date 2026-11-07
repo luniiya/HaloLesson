@@ -1,5 +1,7 @@
 import {
+  BLANK,
   DEFAULT_HEARTS,
+  EXERCISE_TYPES,
   DEFAULT_SESSION_SIZE,
   MAX_HEARTS,
   MAX_SESSION_SIZE,
@@ -32,6 +34,7 @@ import {
   type SubjectColor,
 } from "@halolesson/shared";
 import { db } from "./db";
+import { contentFields, contentJson } from "./exercises";
 import { getLibrary } from "./library";
 import { getSubject, nextPosition, recordLevel } from "./subjects";
 
@@ -107,12 +110,9 @@ const lineageOf = (table: "units" | "skills", ids: string[]) =>
   new Map(ids.length ? db.query<{ id: string; origin_id: string | null }, string[]>(`SELECT id, origin_id FROM ${table} WHERE id IN (${ids.map(() => "?").join(", ")})`).all(...ids).map((row) => [row.id, row.origin_id]) : []);
 
 function exportExercise(row: ExerciseRow): ExportExercise {
-  const content = JSON.parse(row.content_json) as { options?: string[]; correctIndex?: number; answers?: string[] };
   const concepts = JSON.parse(row.concepts_json) as string[];
   const shared = { tier: TIERS[row.tier] ?? "easy", ...(concepts.length ? { concepts } : {}) };
-  return row.type === "multiple_choice"
-    ? { ...shared, type: row.type, prompt: row.prompt, options: content.options ?? [], correctIndex: content.correctIndex ?? 0, explanation: row.explanation }
-    : { ...shared, type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
+  return { ...shared, type: row.type, prompt: row.prompt, ...contentFields(row.type, row.content_json), explanation: row.explanation };
 }
 
 function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean, ids: FileIds): ExportSubject {
@@ -220,7 +220,7 @@ export function buildExport(userId: string, subjectId?: string): ExportFile {
   }));
   const folderOf = new Map(library.subjects.map((subject) => [subject.id, subject.folderId]));
   const rows = db
-    .query<SubjectRow, [string]>("SELECT * FROM subjects WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at")
+    .query<SubjectRow, [string]>("SELECT * FROM subjects WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at, rowid")
     .all(userId)
     .filter((row) => states.get(row.id) !== "trashed");
   const ids = new FileIds();
@@ -289,7 +289,33 @@ export function parseExercise(value: unknown, where: string): ExportExercise {
     if (answers.length === 0) throw new Error(`${where} needs at least one accepted answer`);
     return { ...shared, type: "free_text", prompt, answers };
   }
-  throw new Error(`${where} type must be multiple_choice or free_text`);
+  if (input.type === "order") {
+    const items = strings(input.items, `${where} item`);
+    if (items.length < 2) throw new Error(`${where} needs at least 2 items to order`);
+    return { ...shared, type: "order", prompt, items };
+  }
+  if (input.type === "match") {
+    const pairs = list(input.pairs, `${where} pairs`).map((pair, index) => {
+      const sides = strings(pair, `${where} pair ${index + 1} side`);
+      if (sides.length !== 2) throw new Error(`${where} pair ${index + 1} must be [left, right]`);
+      return sides as [string, string];
+    });
+    if (pairs.length < 2) throw new Error(`${where} needs at least 2 pairs to match`);
+    if (new Set(pairs.map(([left]) => left.toLocaleLowerCase())).size !== pairs.length) throw new Error(`${where} left items must all differ`);
+    return { ...shared, type: "match", prompt, pairs };
+  }
+  if (input.type === "fill_blanks") {
+    const blanks = list(input.blanks, `${where} blanks`).map((answers, index) => {
+      const accepted = strings(answers, `${where} blank ${index + 1} answer`);
+      if (!accepted.length) throw new Error(`${where} blank ${index + 1} needs at least one accepted answer`);
+      return accepted;
+    });
+    const gaps = prompt.split(BLANK).length - 1;
+    if (!gaps) throw new Error(`${where} prompt needs at least one ${BLANK} blank`);
+    if (gaps !== blanks.length) throw new Error(`${where} prompt has ${gaps} ${BLANK} blanks but ${blanks.length} lists of answers`);
+    return { ...shared, type: "fill_blanks", prompt, blanks };
+  }
+  throw new Error(`${where} type must be one of ${EXERCISE_TYPES.join(", ")}`);
 }
 
 function parseProgress(value: unknown): ExportSkill["progress"] {
@@ -512,8 +538,6 @@ export function checkImportOptions(value: unknown, count: number): ImportOptions
   return { choices, folderId };
 }
 
-const contentJson = (exercise: ExportExercise) =>
-  JSON.stringify(exercise.type === "multiple_choice" ? { options: exercise.options, correctIndex: exercise.correctIndex } : { answers: exercise.answers });
 
 // "Update mine": the existing subject takes the file's content. Units, skills
 // and exercises with the same lineage are updated in place, so your progress

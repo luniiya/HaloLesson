@@ -5,6 +5,7 @@ import { TIER_LABELS, TIERS, type AttemptResult, type PracticeSession } from "@h
 import { api } from "$lib/api";
 import { isMuted, play, setMuted } from "$lib/sounds";
 import Button from "../components/Button";
+import { BlanksAnswer, MatchAnswer, OrderAnswer } from "../components/ExerciseAnswer";
 import MathText from "../components/MathText";
 import { MEDAL_COLORS } from "../components/SkillNode";
 
@@ -16,7 +17,8 @@ export default function PracticePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [session, setSession] = useState<PracticeSession | null>(null);
-  const [answer, setAnswer] = useState<string | number>("");
+  // "" until there is an answer to check: an option index, typed text, or one string per item.
+  const [answer, setAnswer] = useState<string | number | string[]>("");
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -96,9 +98,14 @@ export default function PracticePage() {
       ) : current && (
         <main className="practice-main">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-accent-deep">{session.subjectName} · {session.skillTitle} · {tierLabel}</p>
-          <h1 className="mt-3 text-2xl font-black leading-tight sm:text-3xl"><MathText text={current.prompt} /></h1>
-          <form onSubmit={checkAnswer} className="mt-8">
-            {current.type === "multiple_choice" ? (
+          {current.type === "fill_blanks"
+            ? <h1 className="mt-3 text-sm font-black text-wolf">Fill in the blanks</h1>
+            : <h1 className="mt-3 text-2xl font-black leading-tight sm:text-3xl"><MathText text={current.prompt} /></h1>}
+          <form onSubmit={checkAnswer} className={current.type === "fill_blanks" ? "mt-3" : "mt-8"}>
+            {current.type === "order" || current.type === "match" || current.type === "fill_blanks" ? (() => {
+              const Input = { order: OrderAnswer, match: MatchAnswer, fill_blanks: BlanksAnswer }[current.type];
+              return <Input key={`${current.id}-${session.answered}`} exercise={current} disabled={Boolean(result)} onAnswer={(value) => setAnswer(value ?? "")} />;
+            })() : current.type === "multiple_choice" ? (
               <div className="grid gap-3" role="radiogroup" aria-label="Answer choices">
                 {current.options.map((option, optionIndex) => (
                   <label key={optionIndex} className={`practice-option ${answer === optionIndex ? "practice-option-selected" : ""}`}>

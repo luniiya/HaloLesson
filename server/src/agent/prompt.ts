@@ -1,4 +1,4 @@
-import { DEFAULT_HEARTS, DEFAULT_SESSION_SIZE, LEVEL_LABELS, MAX_CONCEPTS, MAX_HEARTS, MAX_LEVEL, MAX_LINKS_PER_SKILL, MAX_NOTES_LENGTH, MAX_SESSION_SIZE, MEDAL_COPPER_DAYS, MEDAL_SILVER_DAYS, SUBJECT_ICONS, TIERS } from "@halolesson/shared";
+import { BLANK, DEFAULT_HEARTS, DEFAULT_SESSION_SIZE, LEVEL_LABELS, MAX_CONCEPTS, MAX_HEARTS, MAX_LEVEL, MAX_LINKS_PER_SKILL, MAX_NOTES_LENGTH, MAX_SESSION_SIZE, MEDAL_COPPER_DAYS, MEDAL_SILVER_DAYS, SUBJECT_ICONS, TIERS } from "@halolesson/shared";
 
 // The copy-paste prompt that connects an agent to one account, and the plain
 // text API reference it points to. Both are built from the origin the user's
@@ -37,7 +37,7 @@ Keep this token private. It gives full access to my lessons and doesn't expire; 
 - Tag each exercise with concepts: short tags for what it tests ("chain rule", "sign of the result", "forgot +C"). Reuse the same tags across exercises. Wrong answers count against them, which is how the server finds what I struggle with.
 - Write math in LaTeX between $...$ inline or $$...$$ on its own line (prompts, options, explanations); the app renders it.
 - Practice should be procedural: applying the idea, not recalling trivia. Varied contexts, unambiguous answers, and an explanation on every exercise that teaches why.
-- Mix multiple choice and free text. Free-text answers are matched ignoring case and extra spaces, so list every reasonable form (e.g. "1/2", "0.5").
+- Mix the exercise types: multiple choice, free text, order (put steps or values in sequence), match (pair terms with definitions, expressions with values) and fill in the blanks. Typed answers are matched ignoring case and extra spaces, so list every reasonable form (e.g. "1/2", "0.5").
 - When I ask for review, read my progress, recent mistakes and a skill's insight (weak concepts, exercises I'd likely fail), then write new exercises that hit those weak concepts.
 - Finish with a short summary of what you made and the link ${origin}/subjects/<subjectId>.
 
@@ -83,14 +83,18 @@ position is the 0-based order among the folders and subjects under the same pare
   and regions; there are no coordinates to set.
       exercise, multiple choice: { id, tier, concepts, type: "multiple_choice", prompt (max 2000), options: string[] (2+, each max 500), correctIndex, explanation (max 2000) }
       exercise, free text:       { id, tier, concepts, type: "free_text", prompt (max 2000), answers: string[] (1+, each max 500), explanation (max 2000) }
+      exercise, order:           { id, tier, concepts, type: "order", prompt (max 2000), items: string[] (2+, in the right order, each max 500), explanation (max 2000) }
+      exercise, match:           { id, tier, concepts, type: "match", prompt (max 2000), pairs: [left, right][] (2+, lefts all different, each side max 500), explanation (max 2000) }
+      exercise, fill in blanks:  { id, tier, concepts, type: "fill_blanks", prompt (max 2000, one ${BLANK} per gap), blanks: string[][] (one list of accepted answers per ${BLANK}, in order), explanation (max 2000) }
       tier: ${TIERS.join("|")} (default easy). concepts: up to ${MAX_CONCEPTS} short tags (max 60 each) for what the exercise tests.
 Tiers: a skill has four, cleared in order, each with its own exercise pool. A session plays one tier: it serves the sessionSize exercises
 the learner is most likely to fail (FSRS memory model on every past answer, failed sessions included), a wrong answer costs a heart and
 comes back at the end of the session, and zero hearts fails the session. Answering everything clears the tier. Clearing expert makes the
 skill gold; without another expert clear it turns silver after ${MEDAL_SILVER_DAYS} days and copper after ${MEDAL_COPPER_DAYS}. tiersCleared is 0-4; medal is gold|silver|copper|null.
-The server assigns every id. Free-text answers match ignoring case and repeated spaces.
+The server assigns every id. Typed answers (free text, blanks) match ignoring case and repeated spaces.
+order shows the items shuffled; match shows the left column in order and the right one shuffled.
 Math: prompt, options, answers shown and explanation render LaTeX between $...$ (inline) or $$...$$ (display); \\$ is a literal dollar.
-Rendering is sandboxed (no links, images or HTML). Free-text answers are compared as plain text, so ask for answers the learner can type.
+Rendering is sandboxed (no links, images or HTML). Typed answers are compared as plain text, so ask for answers the learner can type.
 explanation is optional to the server, but always write one: it's what the learner sees after answering.
 Limits: 500 subjects, 200 folders, 100 units per subject, 100 skills per unit, 400 exercises per skill (all tiers together).
 

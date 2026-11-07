@@ -2,6 +2,7 @@ import { DEFAULT_UNLOCK_IN_ORDER, DEFAULT_UNLOCK_TIER, isSubjectIcon, isSubjectT
 import { buildExport, checkImportOptions, HEX_COLOR, importSubjects, list, parseExercise, parseImport, previewImport, record, text, type ParsedImport } from "../dataExport";
 import { readUpload } from "../halolessonFile";
 import { db } from "../db";
+import { answerText, contentFields, contentJson, correctAnswerText } from "../exercises";
 import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
 import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
 import { checkStatsOptions, getStats } from "../stats";
@@ -41,6 +42,9 @@ export interface AgentExercise {
   options?: string[];
   correctIndex?: number;
   answers?: string[];
+  items?: string[];
+  pairs?: Array<[string, string]>;
+  blanks?: string[][];
   explanation: string;
 }
 
@@ -55,11 +59,8 @@ interface ExerciseRow {
 }
 
 function toExercise(row: ExerciseRow): AgentExercise {
-  const content = JSON.parse(row.content_json) as { options?: string[]; correctIndex?: number; answers?: string[] };
   const shared = { id: row.id, tier: TIERS[row.tier] ?? "easy", concepts: JSON.parse(row.concepts_json) as string[] };
-  return row.type === "multiple_choice"
-    ? { ...shared, type: row.type, prompt: row.prompt, options: content.options ?? [], correctIndex: content.correctIndex ?? 0, explanation: row.explanation }
-    : { ...shared, type: row.type, prompt: row.prompt, answers: content.answers ?? [], explanation: row.explanation };
+  return { ...shared, type: row.type, prompt: row.prompt, ...contentFields(row.type, row.content_json), explanation: row.explanation };
 }
 
 function exercisesOf(skillId: string): AgentExercise[] {
@@ -260,8 +261,8 @@ export function readProgress(userId: string, subjectId?: string) {
         concepts: exercise.concepts,
         prompt: exercise.prompt,
         durationMs: row.duration_ms,
-        answerGiven: exercise.type === "multiple_choice" && typeof given === "number" ? (exercise.options?.[given] ?? given) : given,
-        correctAnswer: exercise.type === "multiple_choice" ? exercise.options?.[exercise.correctIndex ?? 0] : exercise.answers?.[0],
+        answerGiven: answerText(row.type, row.prompt, row.content_json, given),
+        correctAnswer: correctAnswerText(row.type, row.prompt, row.content_json),
         at: row.created_at,
       };
     }),
@@ -464,16 +465,15 @@ function putSkill(userId: string, input: Record<string, unknown>) {
     const kept = new Set(exercises.flatMap((item) => (item.id ? [item.id] : [])));
     for (const exerciseId of existing) if (!kept.has(exerciseId)) db.run("DELETE FROM exercises WHERE id = ?", [exerciseId]);
     exerciseIds = exercises.map(({ id: exerciseId, exercise }, exerciseIndex) => {
-      const content = exercise.type === "multiple_choice" ? { options: exercise.options, correctIndex: exercise.correctIndex } : { answers: exercise.answers };
       if (exerciseId) {
         db.run("UPDATE exercises SET type = ?, prompt = ?, content_json = ?, explanation = ?, tier = ?, concepts_json = ?, position = ? WHERE id = ?", [
-          exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, TIERS.indexOf(exercise.tier ?? "easy"), JSON.stringify(exercise.concepts ?? []), exerciseIndex, exerciseId,
+          exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, TIERS.indexOf(exercise.tier ?? "easy"), JSON.stringify(exercise.concepts ?? []), exerciseIndex, exerciseId,
         ]);
         return exerciseId;
       }
       const newId = crypto.randomUUID();
       db.run("INSERT INTO exercises (id, skill_id, type, prompt, content_json, explanation, tier, concepts_json, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-        newId, skillId, exercise.type, exercise.prompt, JSON.stringify(content), exercise.explanation, TIERS.indexOf(exercise.tier ?? "easy"), JSON.stringify(exercise.concepts ?? []), exerciseIndex, now,
+        newId, skillId, exercise.type, exercise.prompt, contentJson(exercise), exercise.explanation, TIERS.indexOf(exercise.tier ?? "easy"), JSON.stringify(exercise.concepts ?? []), exerciseIndex, now,
       ]);
       return newId;
     });

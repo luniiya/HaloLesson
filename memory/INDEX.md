@@ -14,6 +14,12 @@
 - [Data portability](halolesson/data-portability.md) — later: export/import plus sharing individual skills and whole subjects
 - [Account system port](halolesson/account-system-port.md) — 2026-11-06: port recoral setup/account/sessions/admin/settings/import-export
 
+## anki
+- [User Anki server](anki/user-anki-server.md) — anki.luniiya.me holds the user's REAL collection; non-destructive calls only; default URL AnkiWeb
+- [Anki link feature](anki/anki-link-feature.md) — Settings link, Flashcards tab under Learn (only when linked), merged labelled stats, never store password
+- [Anki sync protocol](anki/anki-sync-protocol.md) — v11 sync over zstd JSON, schema 18, normal sync steps, never full upload
+- [Anki scheduler port](anki/anki-scheduler-port.md) — scheduler.ts matches Python Anki exactly (SM-2 + FSRS, fuzz off); own fuzz RNG
+
 ## user
 - [User preferences](user/preferences.md) — token-conscious, casual; NO unrequested bwl visual checks
 
@@ -42,3 +48,4 @@
 - [LaTeX math](halolesson/latex-math.md) — KaTeX, trust off, $…$ / $$…$$ in exercise text; agents told in prompt/spec/MCP
 - [Start flag](halolesson/start-flag.md) — start is a flag node linked to start skills via id "start", subject accent color, halo shading
 - [Book artwork WebGL](halolesson/book-artwork-webgl.md) — spinning book is three.js (book3d.ts, lazy chunk); halo/base still flat CSS
+- [Exercise answer types](halolesson/exercise-answer-types.md) — order, match, fill_blanks added; one module server/src/exercises.ts
