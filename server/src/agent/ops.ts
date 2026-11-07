@@ -1,15 +1,16 @@
 import { isSubjectIcon, isSubjectType, libraryStates, MAX_NOTES_LENGTH, purgeDate, SUBJECT_COLORS, SUBJECT_ICONS, type ExerciseType, type ItemKind, type SubjectColor, type SubjectIcon, type SubjectType } from "@halolesson/shared";
 import { buildExport, checkImportOptions, HEX_COLOR, importSubjects, list, parseExercise, parseImport, previewImport, record, text, type ParsedImport } from "../dataExport";
-import { readUpload } from "../haloFile";
+import { readUpload } from "../halolessonFile";
 import { db } from "../db";
 import { bumpRevision, libraryRevision, notifyLibrary } from "../events";
 import { createFolder, getLibrary, moveItem, restoreItem, setArchived, trashItem, updateFolder } from "../library";
 import { checkStatsOptions, getStats } from "../stats";
-import { checkLevel, getSubject, nextPosition } from "../subjects";
+import { checkLevel, getSubject, nextPosition, recordLevel } from "../subjects";
+import { linkSkills, MAX_REGIONS_PER_SUBJECT, MAX_SKILLS_PER_REGION, unlinkSkills, updateSkill } from "../skillGraph";
 
 const MAX_SUBJECTS = 500;
-const MAX_UNITS_PER_SUBJECT = 100;
-const MAX_SKILLS_PER_UNIT = 100;
+const MAX_UNITS_PER_SUBJECT = MAX_REGIONS_PER_SUBJECT;
+const MAX_SKILLS_PER_UNIT = MAX_SKILLS_PER_REGION;
 const MAX_EXERCISES_PER_SKILL = 50;
 const MAX_REPORTS_PER_USER = 50;
 const REQUEST_ID = /^[a-zA-Z0-9_-]{8,100}$/;
@@ -107,7 +108,8 @@ export function readSubject(userId: string, subjectId: string) {
   const { subject, units } = detail;
   return {
     revision: libraryRevision(userId),
-    subject: { id: subject.id, type: subject.type, level: subject.level, notes: subject.notes, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId },
+    subject: { id: subject.id, type: subject.type, level: subject.level, notes: subject.notes, name: subject.name, description: subject.description, color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon, folderId: subject.folderId, unlockInOrder: subject.unlockInOrder },
+    links: detail.links,
     units: units.map((unit) => ({
       id: unit.id,
       title: unit.title,
@@ -116,6 +118,8 @@ export function readSubject(userId: string, subjectId: string) {
         id: skill.id,
         title: skill.title,
         description: skill.description,
+        start: skill.start,
+        locked: skill.locked,
         stars: skill.stars,
         mastery: skill.mastery,
         exercises: exercisesOf(skill.id),
@@ -149,11 +153,11 @@ export function readExport(userId: string, subjectId?: string) {
   return buildExport(userId, subjectId);
 }
 
-// An import arrives as `file` (export JSON) or `halo` (a .halo file, base64).
+// An import arrives as `file` (export JSON) or `halolesson` (a .halolesson file, base64).
 function importInput(input: Record<string, unknown>): ParsedImport {
   try {
-    if (typeof input.halo === "string") return parseImport(readUpload(new Uint8Array(Buffer.from(input.halo, "base64"))));
-    if (input.file === undefined) throw new Error("Send the export as file (JSON) or halo (base64 .halo file)");
+    if (typeof input.halolesson === "string") return parseImport(readUpload(new Uint8Array(Buffer.from(input.halolesson, "base64"))));
+    if (input.file === undefined) throw new Error("Send the export as file (JSON) or halolesson (base64 .halolesson file)");
     return parseImport(input.file);
   } catch (error) {
     throw new AgentError(error instanceof Error ? error.message : "Invalid file", 400, "INVALID");
@@ -303,7 +307,7 @@ function countOf(sql: string, param: string): number {
 function putSubject(userId: string, input: Record<string, unknown>) {
   const id = optionalId(input.id, "subject.id");
   const current = id
-    ? db.query<{ type: SubjectType; name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; level: number | null; notes: string; folder_id: string | null }, [string, string]>(
+    ? db.query<{ type: SubjectType; name: string; description: string; color: SubjectColor; gradient_start: string; gradient_end: string; icon: SubjectIcon | null; level: number | null; notes: string; folder_id: string | null; unlock_in_order: number }, [string, string]>(
         "SELECT * FROM subjects WHERE id = ? AND user_id = ?",
       ).get(id, userId)
     : null;
@@ -327,14 +331,17 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   const type: SubjectType = current?.type ?? (input.type as SubjectType | undefined) ?? "subject";
   const level = input.level === undefined ? (current?.level ?? null) : checkLevel(input.level);
   const notes = input.notes === undefined && current ? current.notes : text(input.notes ?? "", "subject.notes", MAX_NOTES_LENGTH);
+  if (input.unlockInOrder !== undefined && typeof input.unlockInOrder !== "boolean") throw new AgentError("subject.unlockInOrder must be true or false", 400, "INVALID");
+  const unlockInOrder = input.unlockInOrder === undefined ? current?.unlock_in_order === 1 : input.unlockInOrder;
   // folderId moves the subject into a folder (null: top level); position is its index among that folder's items.
   const folderId = input.folderId === undefined ? undefined : input.folderId === null ? null : requiredId(input.folderId, "subject.folderId");
   const index = position(input.position);
   const now = new Date().toISOString();
   if (current && id) {
-    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, updated_at = ? WHERE id = ?", [
-      name, description, color, gradientStart, gradientEnd, icon, level, notes, now, id,
+    db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, unlock_in_order = ?, updated_at = ? WHERE id = ?", [
+      name, description, color, gradientStart, gradientEnd, icon, level, notes, unlockInOrder ? 1 : 0, now, id,
     ]);
+    if (level !== current.level) recordLevel(userId, id, level, now);
     if (folderId !== undefined || index !== undefined) moveItem(userId, "subject", id, folderId === undefined ? current.folder_id : folderId, index);
     return { subjectId: folderId !== undefined || index !== undefined ? null : id, result: { id } };
   }
@@ -343,9 +350,10 @@ function putSubject(userId: string, input: Record<string, unknown>) {
   }
   if (folderId && !db.query("SELECT 1 FROM folders WHERE id = ? AND user_id = ?").get(folderId, userId)) throw notFound("Folder");
   const newId = crypto.randomUUID();
-  db.run("INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-    newId, userId, type, name, description, color, gradientStart, gradientEnd, icon, level, notes, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
+  db.run("INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, unlock_in_order, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+    newId, userId, type, name, description, color, gradientStart, gradientEnd, icon, level, notes, unlockInOrder ? 1 : 0, folderId ?? null, nextPosition(userId, folderId ?? null), now, now,
   ]);
+  if (level !== null) recordLevel(userId, newId, level, now);
   if (index !== undefined) moveItem(userId, "subject", newId, folderId ?? null, index);
   return { subjectId: newId, result: { id: newId } };
 }
@@ -439,6 +447,10 @@ function putSkill(userId: string, input: Record<string, unknown>) {
       return newId;
     });
   }
+  if (input.start !== undefined) updateSkill(userId, skillId, { start: input.start });
+  if (input.linkTo !== undefined) {
+    for (const [linkIndex, other] of list(input.linkTo, "skill.linkTo").entries()) linkSkills(userId, skillId, requiredId(other, `skill.linkTo[${linkIndex}]`));
+  }
   const crossSubject = moved && ownedUnit(userId, current.unit_id).subject_id !== subjectId;
   return { subjectId: crossSubject ? null : subjectId, result: { id: skillId, exerciseIds } };
 }
@@ -473,6 +485,8 @@ function itemOp(userId: string, command: Record<string, unknown>, run: (kind: It
   return { subjectId: null, result: { id, kind } };
 }
 
+const linkResult = ({ subjectId }: { subjectId: string }) => ({ subjectId, result: { subjectId } });
+
 function deleteRecord(userId: string, kind: "subject" | "unit" | "skill", id: string) {
   if (kind === "subject") {
     // Deleting a subject only moves it to the trash; it is purged after 30 days.
@@ -502,8 +516,10 @@ function applyCommand(userId: string, command: Record<string, unknown>) {
     case "deleteUnit": return deleteRecord(userId, "unit", requiredId(command.id, "id"));
     case "deleteSkill": return deleteRecord(userId, "skill", requiredId(command.id, "id"));
     case "importFile": return importFile(userId, command);
+    case "linkSkills": return linkResult(linkSkills(userId, requiredId(command.a, "a"), requiredId(command.b, "b")));
+    case "unlinkSkills": return linkResult(unlinkSkills(userId, requiredId(command.a, "a"), requiredId(command.b, "b")));
     default:
-      throw new AgentError("command.op must be one of putSubject, putUnit, putSkill, putFolder, moveItem, archiveItem, trashItem, restoreItem, deleteSubject, deleteUnit, deleteSkill, importFile", 400, "UNKNOWN_OP");
+      throw new AgentError("command.op must be one of putSubject, putUnit, putSkill, putFolder, moveItem, archiveItem, trashItem, restoreItem, deleteSubject, deleteUnit, deleteSkill, linkSkills, unlinkSkills, importFile", 400, "UNKNOWN_OP");
   }
 }
 

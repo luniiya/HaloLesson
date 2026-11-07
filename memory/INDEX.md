@@ -36,3 +36,4 @@
 - [Agent tab](halolesson/agent-tab.md) — Connect agent is a /agent tab, not a popup
 - [PWA](halolesson/pwa.md) — installable: manifest, icons, sw.js (API never cached), prod-only registration
 - [Export format v2](halolesson/export-format-v2.md) — .halo zip; subject page = share one, settings = full backup; ask on re-import; preview+pick
+- [Skill graph vision](halolesson/skill-graph-vision.md) — subject page = 2D skill graph like the Map of Mathematics; server-side layout; prereq lock setting; edit mode

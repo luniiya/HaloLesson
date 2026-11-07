@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Icon } from "@tabler/icons-react";
 import { LEVEL_LABELS, MAX_LEVEL, type Folder, type Subject } from "@halolesson/shared";
 import { mixColors } from "$lib/colors";
@@ -40,6 +41,29 @@ function Ring({ arcs }: { arcs: RingArc[] }) {
 // target (see LibraryOrbit); colors come from the wrapper's --level vars.
 // `ring` replaces the plain progress ring with arcs (see subjectRing).
 export function OrbitFace({ Symbol, label, meta, drop, ring }: { Symbol: Icon; label: string; meta: string; drop?: string; ring?: RingArc[] }) {
+  const tip = useRef<HTMLSpanElement>(null);
+  // The tag is centred under the circle; near the edge of the orbit's section
+  // it would be cut off, so it slides sideways to stay inside when shown.
+  useEffect(() => {
+    const node = tip.current;
+    const owner = node?.parentElement;
+    if (!node || !owner) return;
+    const keepInside = () => {
+      node.style.setProperty("--tip-shift", "0px");
+      const bounds = (node.closest("section") ?? document.body).getBoundingClientRect();
+      const rect = node.getBoundingClientRect();
+      const scale = rect.width / (node.offsetWidth || rect.width || 1);
+      const margin = 8;
+      const shift = rect.left < bounds.left + margin ? bounds.left + margin - rect.left : rect.right > bounds.right - margin ? bounds.right - margin - rect.right : 0;
+      node.style.setProperty("--tip-shift", `${shift / scale}px`);
+    };
+    owner.addEventListener("pointerenter", keepInside);
+    owner.addEventListener("focusin", keepInside);
+    return () => {
+      owner.removeEventListener("pointerenter", keepInside);
+      owner.removeEventListener("focusin", keepInside);
+    };
+  }, []);
   return (
     <>
       <span className={`level-ring ${ring ? "level-ring-custom" : ""}`} data-drop={drop}>
@@ -49,7 +73,7 @@ export function OrbitFace({ Symbol, label, meta, drop, ring }: { Symbol: Icon; l
           <span className="level-face"><Symbol stroke={2.4} aria-hidden="true" /></span>
         </span>
       </span>
-      <span className="subject-node-tip" aria-hidden="true">
+      <span ref={tip} className="subject-node-tip" aria-hidden="true">
         <span className="subject-node-label">{label}</span>
         <span className="subject-node-meta">{meta}</span>
       </span>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import UnlockInOrderToggle from "./UnlockInOrderToggle";
 import { Link } from "react-router";
 import { IconArchive, IconArrowRight, IconFolderOpen, IconTrash, IconX } from "@tabler/icons-react";
 import { SUBJECT_COLORS, libraryStates, type Folder, type Library, type Subject, type SubjectColor, type SubjectIcon } from "@halolesson/shared";
@@ -89,6 +90,7 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
   const [gradientStart, setGradientStart] = useState(subject.gradientStart);
   const [gradientEnd, setGradientEnd] = useState(subject.gradientEnd);
   const [icon, setIcon] = useState<SubjectIcon | null>(subject.icon);
+  const [unlockInOrder, setUnlockInOrder] = useState(subject.unlockInOrder);
 
   function chooseColor(option: SubjectColor) {
     setColor(option);
@@ -99,7 +101,7 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
   return (
     <form
       className="mt-5 grid gap-4 sm:grid-cols-2"
-      onSubmit={(event) => { event.preventDefault(); onSave({ name, description, color, gradientStart, gradientEnd, icon }); }}
+      onSubmit={(event) => { event.preventDefault(); onSave({ name, description, color, gradientStart, gradientEnd, icon, ...(subject.type === "subject" ? { unlockInOrder } : {}) }); }}
     >
       <label className="form-label">Name<input className="form-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required /></label>
       <label className="form-label">Description<input className="form-input" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} /></label>
@@ -122,6 +124,7 @@ function SubjectFields({ subject, onSave }: { subject: Subject; onSave: (fields:
           <input type="color" value={gradientEnd} onChange={(event) => setGradientEnd(event.target.value)} aria-label="Gradient end color" />
         </div>
       </fieldset>}
+      {subject.type === "subject" && <UnlockInOrderToggle className="sm:col-span-2" checked={unlockInOrder} onChange={setUnlockInOrder} />}
       <div className="sm:col-span-2"><IconPicker value={icon} onChange={setIcon} name={name} description={description} /></div>
       <div className="flex justify-end sm:col-span-2"><Button type="submit">Save changes</Button></div>
     </form>

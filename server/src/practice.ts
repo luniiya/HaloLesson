@@ -1,5 +1,6 @@
 import type { AttemptResult, PracticeSession } from "@halolesson/shared";
 import { db } from "./db";
+import { isSkillLocked } from "./skillGraph";
 
 interface SkillRow {
   id: string;
@@ -29,6 +30,7 @@ export function getPracticeSession(userId: string, skillId: string): PracticeSes
     WHERE skills.id = ? AND subjects.user_id = ?
   `).get(skillId, userId);
   if (!skill) throw new Error("Skill not found");
+  if (isSkillLocked(userId, skillId)) throw new Error("This skill is locked. Finish a skill linked to it to open it");
   const exercises = db.query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE skill_id = ? ORDER BY position, created_at").all(skillId);
   return {
     skillId: skill.id,

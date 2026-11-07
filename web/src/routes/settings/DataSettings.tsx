@@ -68,10 +68,10 @@ export function ImportPanel({ onImported }: { onImported?: (result: ImportResult
         disabled={busy}
       >
         <IconFileUpload size={32} className="text-secondary" aria-hidden="true" />
-        <span className="font-extrabold text-ink">{busy ? "Reading…" : "Drop a .halo file or click to choose"}</span>
+        <span className="font-extrabold text-ink">{busy ? "Reading…" : "Drop a .halolesson file or click to choose"}</span>
         <span className="text-xs font-semibold text-wolf">Backups, shared subjects, older .json exports, or agent JSON output</span>
       </button>
-      <input ref={fileRef} type="file" accept=".halo,.zip,.json,application/json,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void previewFile(event.target.files?.[0]); event.target.value = ""; }} />
+      <input ref={fileRef} type="file" accept=".halolesson,.zip,.json,application/json,application/zip" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { void previewFile(event.target.files?.[0]); event.target.value = ""; }} />
       <label className="form-label">Or paste JSON
         <textarea className="form-input min-h-32 resize-y font-mono text-xs leading-5" value={pasted} onChange={(event) => setPasted(event.target.value)} placeholder={'{ "subject": { "name": "…" }, "units": [ … ] }'} spellCheck={false} />
       </label>
@@ -117,7 +117,7 @@ export default function DataSettings() {
     <>
       <section className="settings-card">
         <h2 className="settings-card-title">Export a backup</h2>
-        <p className="settings-card-hint">A .halo file with your whole account: every subject, tracker and folder, plus your progress, levels, notes and history. To share one subject without your personal data, use Share on its page instead.</p>
+        <p className="settings-card-hint">A .halolesson file with your whole account: every subject, tracker and folder, plus your progress, levels, notes and history. To share one subject without your personal data, use Share on its page instead.</p>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([["Subjects", stats?.subjectCount], ["Units", stats?.unitCount], ["Skills", stats?.skillCount], ["Exercises", stats?.exerciseCount]] as const).map(([label, value]) => (
             <div key={label} className="rounded-xl bg-eel px-4 py-3">

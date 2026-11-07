@@ -168,6 +168,9 @@ export interface Subject {
   // Self-rated, 0 to MAX_LEVEL; null until the user rates themselves.
   level: number | null;
   notes: string;
+  // Skills open one step at a time: a skill is locked until it is a start
+  // skill or linked to a finished one (see skillLocks).
+  unlockInOrder: boolean;
 }
 
 export interface Folder {
@@ -239,11 +242,48 @@ export interface Skill {
   stars: number;
   mastery: number;
   lastPracticedAt: string | null;
+  // Where the skill sits on the subject map, in map units (MAP_SPACING apart
+  // for neighbours). Computed by the server; null only before the first layout.
+  x: number | null;
+  y: number | null;
+  // Where learning begins. With no start skill marked, the first skill is the start.
+  start: boolean;
+  // Only ever true when the subject has unlockInOrder on.
+  locked: boolean;
 }
 
 export interface SubjectDetail {
   subject: Subject;
+  // Units are the map's regions: their skills cluster together.
   units: Array<Unit & { skills: Skill[] }>;
+  // Links between skills, no direction. Each pair appears once.
+  links: Array<[string, string]>;
+}
+
+// Rough distance between linked skills on the map.
+export const MAP_SPACING = 230;
+// The map is drawn squashed vertically, like the plane the oval 3D buttons sit
+// on is seen at an angle: drawn y = layout y * MAP_Y_SCALE.
+export const MAP_Y_SCALE = 0.72;
+export const MAX_LINKS_PER_SKILL = 24;
+
+// A skill is finished once it has at least one star.
+export const isFinished = (skill: Pick<Skill, "stars">) => skill.stars > 0;
+
+// Which skills are locked when unlocking in order. Open: start skills (the
+// first skill when none is marked), finished skills, and every skill linked
+// to a finished one.
+export function skillLocks(skills: Array<Pick<Skill, "id" | "stars" | "start">>, links: Array<[string, string]>): Set<string> {
+  const open = new Set<string>();
+  const starts = skills.filter((skill) => skill.start);
+  for (const skill of starts.length ? starts : skills.slice(0, 1)) open.add(skill.id);
+  const finished = new Set(skills.filter(isFinished).map((skill) => skill.id));
+  for (const id of finished) open.add(id);
+  for (const [a, b] of links) {
+    if (finished.has(a)) open.add(b);
+    if (finished.has(b)) open.add(a);
+  }
+  return new Set(skills.filter((skill) => !open.has(skill.id)).map((skill) => skill.id));
 }
 
 export interface ShareLink {
@@ -327,6 +367,10 @@ export interface ExportSkill {
   id?: string;
   title: string;
   description: string;
+  // Where learning begins on the map.
+  start?: boolean;
+  // File ids of linked skills in the same subject. Each link may be listed on one or both ends.
+  links?: string[];
   exercises: ExportExercise[];
   progress?: { stars: number; mastery: number; correctAttempts: number; totalAttempts: number; lastPracticedAt: string | null };
 }
@@ -352,6 +396,7 @@ export interface ExportSubject {
   gradientStart: string;
   gradientEnd: string;
   icon?: SubjectIcon | null;
+  unlockInOrder?: boolean;
   // Library placement, only in full backups (a shared subject lands at the
   // viewer's top level). `folder` indexes ExportFile.folders.
   folder?: number | null;
@@ -376,7 +421,7 @@ export interface ExportFolder {
 // notes, history); a share is one subject or tracker, content only.
 export type ExportKind = "backup" | "share";
 export const EXPORT_FORMAT_VERSION = 2;
-export const HALO_FILE_EXTENSION = ".halo";
+export const HALOLESSON_FILE_EXTENSION = ".halolesson";
 
 export interface ExportFile {
   format: "halolesson";

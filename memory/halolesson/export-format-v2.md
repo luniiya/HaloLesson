@@ -12,3 +12,6 @@ type: decision
 Related: [[halolesson-data-portability]], [[share-links]]
 
 *(as of 2026-11-07)* Built end to end: server (haloFile.ts, dataExport.ts v2, agent ops/MCP tools) and web (ImportDialog preview+pick, DataSettings import flow, ShareDialog copy). Not visually checked yet.
+
+*(as of 2026-11-07)* Extension renamed: files are now `.halolesson` (user asked), not `.halo`.
+*(as of 2026-11-07)* "halo is too general": code names follow too — `halolessonFile.ts`, `toHalolesson`, `HALOLESSON_FILE_EXTENSION`, agent import field `halolesson` (base64). The halo artwork (BookArtwork) keeps its name.

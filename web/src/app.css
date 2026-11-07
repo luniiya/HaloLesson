@@ -253,7 +253,7 @@
 
   /* Names would collide around a full orbit, so they show on hover/focus. */
   .subject-node-tip {
-    @apply pointer-events-none absolute left-1/2 top-full mt-1 flex w-max max-w-48 -translate-x-1/2 translate-y-1 flex-col items-center rounded-xl border-2 border-swan bg-surface px-3 py-2 text-center opacity-0 shadow-[0_3px_0_var(--color-swan)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100;
+    @apply pointer-events-none absolute left-1/2 top-full mt-1 ml-[var(--tip-shift,0px)] flex w-max max-w-48 -translate-x-1/2 translate-y-1 flex-col items-center rounded-xl border-2 border-swan bg-surface px-3 py-2 text-center opacity-0 shadow-[0_3px_0_var(--color-swan)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100;
   }
 
   .subject-node-label {
@@ -1158,5 +1158,89 @@
   }
   .account-row-icon {
     @apply grid size-10 shrink-0 place-items-center rounded-xl text-white;
+  }
+}
+
+/* Skill map: positions come from the server; the world div is panned and
+   zoomed as one transform. Regions are blobs of same-color circles drawn at
+   low opacity as a group, so overlaps don't darken. */
+@layer components {
+  .skill-map {
+    @apply absolute inset-0 overflow-hidden bg-surface;
+  }
+  .skill-map-viewport {
+    @apply absolute inset-0 cursor-grab touch-none select-none;
+    overflow: clip;
+  }
+  .skill-map-viewport:active { @apply cursor-grabbing; }
+  .skill-map-world {
+    @apply absolute left-0 top-0 origin-top-left;
+  }
+  .skill-map-lines { @apply absolute inset-0 overflow-visible; }
+  .skill-map-region { opacity: 0.14; }
+  .skill-map-link {
+    stroke: var(--color-swan);
+    stroke-width: 8;
+    stroke-linecap: round;
+  }
+  .skill-map-link-active { stroke: var(--color-secondary); }
+  .skill-map-label {
+    @apply absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-xl px-3 py-1 text-xs font-black uppercase tracking-wider text-white;
+    background: var(--region);
+    box-shadow: 0 3px 0 color-mix(in srgb, var(--region) 70%, #000);
+  }
+  .map-node { @apply z-10; }
+  .map-node[aria-pressed="true"] .level-ring { @apply outline-4 outline-offset-4 outline-secondary; }
+  .skill-map-linking .map-node { @apply cursor-crosshair; }
+  .map-node-linked .level-ring { @apply outline-dashed outline-3 outline-offset-4 outline-secondary; }
+  .skill-node-locked .skill-node-title { @apply text-hare; }
+  .skill-start {
+    @apply absolute -top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-lg bg-surface px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-accent-deep shadow-[0_2px_0_var(--color-swan)] ring-2 ring-swan;
+  }
+  .skill-map-zoom {
+    @apply absolute right-3 z-20 flex flex-col overflow-hidden rounded-2xl border-2 border-swan bg-surface shadow-[0_3px_0_var(--color-swan)];
+  }
+  .skill-map-zoom { bottom: var(--map-bottom, 0.75rem); }
+  .subject-map-editing .skill-map-zoom { @apply lg:right-[23.5rem]; }
+  .skill-map-zoom button {
+    @apply grid size-10 place-items-center text-wolf hover:bg-eel hover:text-ink;
+  }
+  .skill-map-zoom button + button { @apply border-t-2 border-swan; }
+
+  .map-panel {
+    @apply flex flex-col gap-4 rounded-3xl border-2 border-swan bg-surface p-4 shadow-[0_3px_0_var(--color-swan)];
+  }
+  .map-panel-title { @apply text-xs font-black uppercase tracking-[0.14em] text-wolf; }
+
+  /* The subject page: the map fills the content area (under the mobile
+     header and bottom bar); everything else floats above it. */
+  .subject-map-page {
+    @apply fixed inset-0 md:left-60;
+    --map-top: 4.75rem;
+    --map-bottom: calc(5.25rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 48rem) {
+    .subject-map-page { --map-top: 0.75rem; --map-bottom: 0.75rem; }
+  }
+  .map-float {
+    @apply pointer-events-auto rounded-2xl border-2 border-swan bg-surface/95 shadow-[0_3px_0_var(--color-swan)] backdrop-blur;
+  }
+  .map-topbar {
+    @apply pointer-events-none absolute inset-x-3 z-30 flex items-start justify-between gap-3;
+    top: var(--map-top);
+  }
+  .map-title { @apply min-w-0 max-w-md px-4 py-3; }
+  .map-actions { @apply flex shrink-0 gap-2 p-2; }
+  .map-link-error {
+    @apply absolute left-1/2 z-40 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2;
+    bottom: var(--map-bottom);
+  }
+  .map-editor-float {
+    @apply absolute inset-x-0 z-30 max-h-[55%] overflow-y-auto rounded-t-3xl border-t-2 border-swan bg-surface p-3 lg:inset-x-auto lg:right-3 lg:top-[calc(var(--map-top)+4.25rem)] lg:max-h-none lg:w-[20rem] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0;
+    bottom: var(--map-bottom);
+  }
+  .map-preview {
+    @apply absolute left-3 right-3 z-30 mt-0 max-w-lg bg-surface sm:right-auto;
+    bottom: var(--map-bottom);
   }
 }

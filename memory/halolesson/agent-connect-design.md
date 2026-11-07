@@ -43,3 +43,5 @@ Revised plan: one shared ops core, with two front doors.
 - A Sonnet agent seeded the user's main account via HTTP: 8 subjects, 40 units, 90 skills, ~550 exercises, plus edge cases. Reliability checks (replay, REVISION_CONFLICT, REQUEST_ID_REUSED, validation, 401) all behaved. MCP endpoint verified via curl.
 - Fixed after it: the Vite proxy rewrote Host, so the spec showed :7246 (now `changeOrigin: false`). Clarified the spec on optional explanations, requestId format, library order, position clamping, replay revision and routine 409s. Added "can't save it? tell me" to the prompt.
 - Claude Code auto mode blocks an agent writing the token to ~/.config/halolesson/token (it's flagged as credential leakage). The `claude mcp add` path is the one that works for Claude Code.
+
+*(as of 2026-11-07)* MCP tools renamed `halo_*` → `hl_*` (user: "halo is too general"). Older notes mentioning `halo_*` mean `hl_*` now.

@@ -1,7 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import { APP_VERSION, EXPORT_FORMAT_VERSION, type ExportFile, type ExportSkill, type ExportSubject } from "@halolesson/shared";
 
-// The .halo file: a zip holding the export split into small JSON files, one
+// The .halolesson file: a zip holding the export split into small JSON files, one
 // per subject, unit and skill, so it diffs well and stays readable by hand.
 //
 //   manifest.json                         format, kind, app version, subject order
@@ -9,7 +9,7 @@ import { APP_VERSION, EXPORT_FORMAT_VERSION, type ExportFile, type ExportSkill, 
 //   subjects/<slug>-<id>/subject.json     name, colors, icon, type
 //   subjects/<slug>-<id>/personal.json    level, notes, progress, answers (backups only)
 //   subjects/<slug>-<id>/units/01-<slug>/unit.json
-//   subjects/<slug>-<id>/units/01-<slug>/skills/01-<slug>.json   skill and its exercises
+//   subjects/<slug>-<id>/units/01-<slug>/skills/01-<slug>.json   skill, its links and exercises
 //   media/                                reserved for exercise images and audio
 //
 // Reading turns it back into the ExportFile JSON shape, which parseImport validates.
@@ -32,7 +32,7 @@ function slug(value: string) {
 const pad = (index: number) => String(index + 1).padStart(2, "0");
 const json = (value: unknown) => strToU8(`${JSON.stringify(value, null, 2)}\n`);
 
-export function toHalo(file: ExportFile): Uint8Array {
+export function toHalolesson(file: ExportFile): Uint8Array {
   const files: Zippable = { "README.txt": strToU8(README) };
   const used = new Set<string>();
   const dirs: string[] = [];
@@ -48,6 +48,7 @@ export function toHalo(file: ExportFile): Uint8Array {
     files[`${dir}/subject.json`] = json({
       id: subject.id, type: subject.type ?? "subject", name: subject.name, description: subject.description,
       color: subject.color, gradientStart: subject.gradientStart, gradientEnd: subject.gradientEnd, icon: subject.icon ?? null,
+      unlockInOrder: subject.unlockInOrder ?? false,
     });
     if (file.kind === "backup") {
       placement[name] = { folder: subject.folder ?? null, position: subject.position ?? index, archivedAt: subject.archivedAt ?? null };
@@ -67,6 +68,8 @@ export function toHalo(file: ExportFile): Uint8Array {
           id: skill.id,
           title: skill.title,
           description: skill.description,
+          ...(skill.start ? { start: true } : {}),
+          ...(skill.links?.length ? { links: skill.links } : {}),
           exercises: skill.exercises.map(({ attempts: _attempts, ...exercise }) => exercise),
         });
       });
@@ -107,14 +110,14 @@ function children(paths: string[], dir: string, pattern: RegExp) {
   return paths.filter((path) => path.startsWith(`${dir}/`) && pattern.test(path.slice(dir.length + 1))).sort();
 }
 
-// An upload is a .halo zip or a JSON export (format 1 or 2). Returns the
+// An upload is a .halolesson zip or a JSON export (format 1 or 2). Returns the
 // ExportFile-shaped JSON for parseImport; nothing is validated here beyond structure.
 export function readUpload(bytes: Uint8Array): unknown {
   if (!isZip(bytes)) {
     try {
       return JSON.parse(strFromU8(bytes)) as unknown;
     } catch {
-      throw new Error("This isn't a haloLesson file (.halo or .json)");
+      throw new Error("This isn't a haloLesson file (.halolesson or .json)");
     }
   }
   let size = 0;
@@ -130,7 +133,7 @@ export function readUpload(bytes: Uint8Array): unknown {
       },
     });
   } catch (error) {
-    throw new Error(error instanceof Error && error.message === "too big" ? "This file unpacks to more than 100 MB" : "This .halo file is damaged and can't be opened");
+    throw new Error(error instanceof Error && error.message === "too big" ? "This file unpacks to more than 100 MB" : "This .halolesson file is damaged and can't be opened");
   }
   const manifest = readJson(files, "manifest.json")!;
   const paths = Object.keys(files);

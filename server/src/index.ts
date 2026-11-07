@@ -1,4 +1,4 @@
-import { APP_VERSION, HALO_FILE_EXTENSION, isSubjectIcon, type ExportFile, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type User } from "@halolesson/shared";
+import { APP_VERSION, HALOLESSON_FILE_EXTENSION, isSubjectIcon, type ExportFile, MAX_AVATAR_LENGTH, SUBJECT_COLORS, type ItemKind, type Settings, type SubjectColor, type SubjectType, type User } from "@halolesson/shared";
 import { resolve, sep } from "node:path";
 import {
   adminCreateUser,
@@ -25,7 +25,7 @@ import { AgentError, commit, readExport, readImportPreview, readLibrary, readPro
 import { buildAgentPrompt, buildAgentSpec } from "./agent/prompt";
 import { agentFromRequest, createAgentToken, listAgentTokens, RateLimitError, revokeAgentToken, type AgentAuth } from "./agent/tokens";
 import { buildExport, checkImportOptions, getExportStats, importSubjects, parseImport, previewImport } from "./dataExport";
-import { readUpload, toHalo } from "./haloFile";
+import { readUpload, toHalolesson } from "./halolessonFile";
 import { eventStream, libraryChanged } from "./events";
 import { getPracticeSession, submitAttempt } from "./practice";
 import { getSettings, updateSettings } from "./settings";
@@ -33,6 +33,7 @@ import { checkStatsOptions, getStats } from "./stats";
 import { copySharedSubject, createShareLink, getShareLink, getSharedSubject, revokeShareLink } from "./shares";
 import { createFolder, getLibrary, moveItem, purgeTrash, restoreItem, setArchived, trashItem, updateFolder } from "./library";
 import { createSubject, getSubject, listSubjects, updateSubject } from "./subjects";
+import { createRegion, createSkill, deleteRegion, deleteSkill, linkSkills, unlinkSkills, updateRegion, updateSkill } from "./skillGraph";
 
 const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
@@ -99,18 +100,32 @@ async function libraryWrite(req: Request, run: (userId: string, input: Record<st
   }
 }
 
-function downloadName(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "subject";
-  return `halolesson-${slug}-${new Date().toISOString().slice(0, 10)}${HALO_FILE_EXTENSION}`;
+// A change to one subject's skill map: listeners for that subject refresh, and
+// the response is the updated map (with the new layout) plus any created id.
+async function graphWrite(req: Request, run: (userId: string, input: Record<string, unknown>) => { subjectId: string; id?: string }, status = 200) {
+  try {
+    const user = requireUser(req);
+    const input = req.method === "DELETE" || req.method === "PUT" ? {} : await body(req);
+    const { subjectId, id } = run(user.id, input);
+    libraryChanged(user.id, subjectId);
+    return Response.json({ ...(id ? { id } : {}), detail: getSubject(user.id, subjectId) }, { status });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
-function haloDownload(file: ExportFile, filename: string) {
-  return new Response(toHalo(file), {
+function downloadName(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "subject";
+  return `halolesson-${slug}-${new Date().toISOString().slice(0, 10)}${HALOLESSON_FILE_EXTENSION}`;
+}
+
+function halolessonDownload(file: ExportFile, filename: string) {
+  return new Response(toHalolesson(file), {
     headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${filename}"` },
   });
 }
 
-// An import upload is the raw file (.halo zip or JSON) as the request body.
+// An import upload is the raw file (.halolesson zip or JSON) as the request body.
 async function readImport(req: Request) {
   if (Number(req.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) throw new Error("Import files must be 10 MB or smaller");
   const bytes = new Uint8Array(await req.arrayBuffer());
@@ -266,7 +281,7 @@ const server = Bun.serve({
     "/api/export": (req) => {
       try {
         const user = requireUser(req);
-        return haloDownload(buildExport(user.id), `halolesson-backup-${new Date().toISOString().slice(0, 10)}${HALO_FILE_EXTENSION}`);
+        return halolessonDownload(buildExport(user.id), `halolesson-backup-${new Date().toISOString().slice(0, 10)}${HALOLESSON_FILE_EXTENSION}`);
       } catch (error) {
         return errorResponse(error);
       }
@@ -442,6 +457,7 @@ const server = Bun.serve({
               type: input.type === undefined ? undefined : (input.type as SubjectType),
               level: input.level === undefined ? undefined : (input.level as number | null),
               notes: optionalString(input.notes),
+              unlockInOrder: input.unlockInOrder === undefined ? undefined : (input.unlockInOrder as boolean),
             },
           );
           libraryChanged(user.id, subject.id);
@@ -470,6 +486,7 @@ const server = Bun.serve({
             icon: input.icon === null ? null : isSubjectIcon(input.icon) ? input.icon : undefined,
             level: input.level === undefined ? undefined : (input.level as number | null),
             notes: optionalString(input.notes),
+            unlockInOrder: input.unlockInOrder === undefined ? undefined : (input.unlockInOrder as boolean),
           }),
         ),
     },
@@ -505,10 +522,28 @@ const server = Bun.serve({
     "/api/library/restore": {
       POST: (req) => libraryWrite(req, (userId, input) => restoreItem(userId, itemKind(input.kind), stringField(input.id))),
     },
+    "/api/subjects/:id/skills": {
+      POST: (req) => graphWrite(req, (userId, input) => ({ subjectId: req.params.id, ...createSkill(userId, req.params.id, input) }), 201),
+    },
+    "/api/subjects/:id/regions": {
+      POST: (req) => graphWrite(req, (userId, input) => ({ subjectId: req.params.id, ...createRegion(userId, req.params.id, input) }), 201),
+    },
+    "/api/skills/:id": {
+      PATCH: (req) => graphWrite(req, (userId, input) => updateSkill(userId, req.params.id, input)),
+      DELETE: (req) => graphWrite(req, (userId) => deleteSkill(userId, req.params.id)),
+    },
+    "/api/skills/:id/links/:other": {
+      PUT: (req) => graphWrite(req, (userId) => linkSkills(userId, req.params.id, req.params.other)),
+      DELETE: (req) => graphWrite(req, (userId) => unlinkSkills(userId, req.params.id, req.params.other)),
+    },
+    "/api/regions/:id": {
+      PATCH: (req) => graphWrite(req, (userId, input) => updateRegion(userId, req.params.id, input)),
+      DELETE: (req) => graphWrite(req, (userId) => deleteRegion(userId, req.params.id)),
+    },
     "/api/subjects/:id/export": (req) => {
       try {
         const file = buildExport(requireUser(req).id, req.params.id);
-        return haloDownload(file, downloadName(file.subjects[0]!.name));
+        return halolessonDownload(file, downloadName(file.subjects[0]!.name));
       } catch (error) {
         return errorResponse(error);
       }

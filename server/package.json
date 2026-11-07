@@ -15,7 +15,9 @@
     "test:agent": "bun test test/agent",
     "test:practice": "bun test test/practice",
     "test:subjects": "bun test test/subjects",
-    "test:stats": "bun test test/stats"
+    "test:stats": "bun test test/stats",
+    "test:graph": "bun test test/graph",
+    "seed:graph": "bun scripts/seedGraph.ts"
   },
   "dependencies": {
     "@halolesson/shared": "workspace:*",

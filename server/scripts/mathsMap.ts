@@ -1,0 +1,113 @@
+// A small "map of mathematics" for the seed script: real skills, grouped in
+// regions, each listing the skills it builds on (by name). Loosely after
+// Dominic Walliman's Map of Mathematics.
+export const MATHS_MAP: Array<{ region: string; skills: Array<[name: string, buildsOn: string[]]> }> = [
+  {
+    region: "Foundations",
+    skills: [
+      ["Counting", []],
+      ["Sets", ["Counting"]],
+      ["Logic", ["Sets"]],
+      ["Functions", ["Sets"]],
+      ["Relations", ["Sets"]],
+      ["Proof Techniques", ["Logic"]],
+      ["Induction", ["Proof Techniques", "Natural Numbers"]],
+    ],
+  },
+  {
+    region: "Number Systems",
+    skills: [
+      ["Natural Numbers", ["Counting"]],
+      ["Integers", ["Natural Numbers"]],
+      ["Fractions", ["Integers"]],
+      ["Decimals", ["Fractions"]],
+      ["Real Numbers", ["Decimals"]],
+      ["Complex Numbers", ["Real Numbers", "Quadratics"]],
+      ["Primes", ["Natural Numbers"]],
+      ["Modular Arithmetic", ["Integers", "Primes"]],
+    ],
+  },
+  {
+    region: "Algebra",
+    skills: [
+      ["Arithmetic", ["Integers"]],
+      ["Expressions", ["Arithmetic"]],
+      ["Linear Equations", ["Expressions"]],
+      ["Inequalities", ["Linear Equations"]],
+      ["Exponents", ["Expressions"]],
+      ["Quadratics", ["Linear Equations", "Exponents"]],
+      ["Polynomials", ["Quadratics"]],
+      ["Logarithms", ["Exponents"]],
+      ["Systems of Equations", ["Linear Equations"]],
+      ["Sequences", ["Expressions", "Functions"]],
+    ],
+  },
+  {
+    region: "Geometry",
+    skills: [
+      ["Shapes", ["Counting"]],
+      ["Angles", ["Shapes"]],
+      ["Triangles", ["Angles"]],
+      ["Pythagoras", ["Triangles", "Exponents"]],
+      ["Circles", ["Shapes"]],
+      ["Area and Volume", ["Shapes", "Arithmetic"]],
+      ["Coordinates", ["Shapes", "Linear Equations"]],
+      ["Trigonometry", ["Pythagoras", "Circles"]],
+      ["Vectors", ["Coordinates"]],
+      ["Transformations", ["Coordinates"]],
+    ],
+  },
+  {
+    region: "Linear Algebra",
+    skills: [
+      ["Matrices", ["Vectors", "Systems of Equations"]],
+      ["Matrix Multiplication", ["Matrices"]],
+      ["Determinants", ["Matrix Multiplication"]],
+      ["Linear Maps", ["Matrix Multiplication", "Transformations"]],
+      ["Vector Spaces", ["Linear Maps"]],
+      ["Eigenvalues", ["Determinants", "Vector Spaces"]],
+    ],
+  },
+  {
+    region: "Calculus",
+    skills: [
+      ["Limits", ["Functions", "Real Numbers"]],
+      ["Continuity", ["Limits"]],
+      ["Derivatives", ["Limits"]],
+      ["Chain Rule", ["Derivatives"]],
+      ["Optimization", ["Derivatives"]],
+      ["Integrals", ["Derivatives", "Area and Volume"]],
+      ["Fundamental Theorem", ["Integrals"]],
+      ["Series", ["Limits", "Sequences"]],
+      ["Differential Equations", ["Chain Rule", "Integrals"]],
+      ["Multivariable Calculus", ["Integrals", "Vectors"]],
+    ],
+  },
+  {
+    region: "Discrete Maths",
+    skills: [
+      ["Combinatorics", ["Counting", "Sets"]],
+      ["Permutations", ["Combinatorics"]],
+      ["Graphs", ["Relations"]],
+      ["Trees", ["Graphs"]],
+      ["Recursion", ["Induction", "Sequences"]],
+      ["Number Theory", ["Modular Arithmetic", "Proof Techniques"]],
+      ["Algorithms", ["Recursion", "Graphs"]],
+      ["Complexity", ["Algorithms", "Logarithms"]],
+    ],
+  },
+  {
+    region: "Probability",
+    skills: [
+      ["Probability", ["Fractions", "Combinatorics"]],
+      ["Conditional Probability", ["Probability"]],
+      ["Bayes' Rule", ["Conditional Probability"]],
+      ["Random Variables", ["Probability", "Functions"]],
+      ["Distributions", ["Random Variables"]],
+      ["Expectation", ["Random Variables"]],
+      ["Normal Distribution", ["Distributions", "Integrals"]],
+      ["Statistics", ["Expectation", "Distributions"]],
+      ["Regression", ["Statistics", "Linear Equations"]],
+    ],
+  },
+];

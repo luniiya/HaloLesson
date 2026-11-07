@@ -236,3 +236,27 @@ for (const table of ["subjects", "units", "skills", "exercises"]) {
   if (!columnsOf(table).includes("origin_id")) db.exec(`ALTER TABLE ${table} ADD COLUMN origin_id TEXT`);
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_subjects_origin ON subjects(user_id, origin_id)");
+
+// Skill graph: a subject's skills sit on a 2D map. Links have no direction
+// (stored once, smaller id first). x and y are computed on the server by the
+// layout in skillGraph.ts; the browser only draws them. With unlock_in_order
+// on, a skill opens once it is a start skill or linked to a finished one.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS skill_links (
+    subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    a TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    b TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (a, b),
+    CHECK (a < b)
+  );
+  CREATE INDEX IF NOT EXISTS idx_skill_links_subject ON skill_links(subject_id);
+  CREATE INDEX IF NOT EXISTS idx_skill_links_b ON skill_links(b);
+`);
+const graphSkillColumns = columnsOf("skills");
+if (!graphSkillColumns.includes("x")) db.exec("ALTER TABLE skills ADD COLUMN x REAL");
+if (!graphSkillColumns.includes("y")) db.exec("ALTER TABLE skills ADD COLUMN y REAL");
+if (!graphSkillColumns.includes("is_start")) db.exec("ALTER TABLE skills ADD COLUMN is_start INTEGER NOT NULL DEFAULT 0");
+// The map structure the stored positions were computed for (see ensureLayout).
+if (!columnsOf("subjects").includes("layout_hash")) db.exec("ALTER TABLE subjects ADD COLUMN layout_hash TEXT");
+if (!columnsOf("subjects").includes("unlock_in_order")) db.exec("ALTER TABLE subjects ADD COLUMN unlock_in_order INTEGER NOT NULL DEFAULT 0");

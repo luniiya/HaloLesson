@@ -1,5 +1,6 @@
-import { isLevel, isSubjectIcon, isSubjectType, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_COLORS, type Skill, type Subject, type SubjectColor, type SubjectDetail, type SubjectIcon, type SubjectType, type Unit } from "@halolesson/shared";
+import { isLevel, skillLocks, isSubjectIcon, isSubjectType, MAX_LEVEL, MAX_NOTES_LENGTH, SUBJECT_COLORS, type Skill, type Subject, type SubjectColor, type SubjectDetail, type SubjectIcon, type SubjectType, type Unit } from "@halolesson/shared";
 import { db } from "./db";
+import { ensureLayout } from "./skillGraph";
 
 interface SubjectRow {
   id: string;
@@ -21,6 +22,7 @@ interface SubjectRow {
   completed_count: number;
   level: number | null;
   notes: string;
+  unlock_in_order: number;
 }
 
 function toSubject(row: SubjectRow): Subject {
@@ -44,6 +46,7 @@ function toSubject(row: SubjectRow): Subject {
     completedCount: row.completed_count,
     level: row.level,
     notes: row.notes,
+    unlockInOrder: row.unlock_in_order === 1,
   };
 }
 
@@ -88,6 +91,7 @@ export interface SubjectFields {
   icon: SubjectIcon | null;
   level: number | null;
   notes: string;
+  unlockInOrder: boolean;
 }
 
 export function checkLevel(level: unknown): number | null {
@@ -107,6 +111,7 @@ export function checkSubjectFields(fields: SubjectFields): SubjectFields {
   if (!hexColor.test(fields.gradientStart) || !hexColor.test(fields.gradientEnd)) throw new Error("Choose valid gradient colors");
   if (fields.icon !== null && !isSubjectIcon(fields.icon)) throw new Error("Choose a valid subject icon");
   checkLevel(fields.level);
+  if (typeof fields.unlockInOrder !== "boolean") throw new Error("unlockInOrder must be true or false");
   if (fields.notes.length > MAX_NOTES_LENGTH) throw new Error(`Notes must be ${MAX_NOTES_LENGTH} characters or fewer`);
   return { ...fields, name, description };
 }
@@ -118,9 +123,9 @@ export function createSubject(
   color: SubjectColor,
   gradientStart: string,
   gradientEnd: string,
-  options: { icon?: SubjectIcon | null; folderId?: string | null; type?: SubjectType; level?: number | null; notes?: string } = {},
+  options: { icon?: SubjectIcon | null; folderId?: string | null; type?: SubjectType; level?: number | null; notes?: string; unlockInOrder?: boolean } = {},
 ): Subject {
-  const fields = checkSubjectFields({ name, description, color, gradientStart, gradientEnd, icon: options.icon ?? null, level: options.level ?? null, notes: options.notes ?? "" });
+  const fields = checkSubjectFields({ name, description, color, gradientStart, gradientEnd, icon: options.icon ?? null, level: options.level ?? null, notes: options.notes ?? "", unlockInOrder: options.unlockInOrder ?? false });
   const type = options.type ?? "subject";
   if (!isSubjectType(type)) throw new Error("Choose a valid type: subject or tracker");
   const folderId = options.folderId ?? null;
@@ -129,8 +134,8 @@ export function createSubject(
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   db.run(
-    "INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [id, userId, type, fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, folderId, nextPosition(userId, folderId), now, now],
+    "INSERT INTO subjects (id, user_id, type, name, description, color, gradient_start, gradient_end, icon, level, notes, unlock_in_order, folder_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, userId, type, fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, fields.unlockInOrder ? 1 : 0, folderId, nextPosition(userId, folderId), now, now],
   );
   if (fields.level !== null) recordLevel(userId, id, fields.level, now);
   return getSubject(userId, id).subject;
@@ -154,9 +159,10 @@ export function updateSubject(userId: string, subjectId: string, patch: Partial<
     icon: patch.icon === undefined ? current.icon : patch.icon,
     level: patch.level === undefined ? current.level : patch.level,
     notes: patch.notes ?? current.notes,
+    unlockInOrder: patch.unlockInOrder ?? current.unlockInOrder,
   });
-  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, updated_at = ? WHERE id = ?", [
-    fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, new Date().toISOString(), subjectId,
+  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, level = ?, notes = ?, unlock_in_order = ?, updated_at = ? WHERE id = ?", [
+    fields.name, fields.description, fields.color, fields.gradientStart, fields.gradientEnd, fields.icon, fields.level, fields.notes, fields.unlockInOrder ? 1 : 0, new Date().toISOString(), subjectId,
   ]);
   if (fields.level !== current.level) recordLevel(userId, subjectId, fields.level);
   return getSubject(userId, subjectId).subject;
@@ -181,6 +187,9 @@ interface SkillRow {
   stars: number;
   mastery: number;
   last_practiced_at: string | null;
+  x: number | null;
+  y: number | null;
+  is_start: number;
 }
 
 export function getSubject(userId: string, subjectId: string): SubjectDetail {
@@ -188,6 +197,7 @@ export function getSubject(userId: string, subjectId: string): SubjectDetail {
     .query<SubjectRow, [string, string]>(`${subjectSelect} WHERE subjects.user_id = ? AND subjects.id = ? AND subjects.deleted_at IS NULL GROUP BY subjects.id`)
     .get(userId, subjectId);
   if (!row) throw new Error("Subject not found");
+  ensureLayout(subjectId);
 
   const unitRows = db
     .query<UnitRow, [string]>("SELECT * FROM units WHERE subject_id = ? ORDER BY position, created_at")
@@ -217,7 +227,20 @@ export function getSubject(userId: string, subjectId: string): SubjectDetail {
         stars: skill.stars,
         mastery: skill.mastery,
         lastPracticedAt: skill.last_practiced_at,
+        x: skill.x,
+        y: skill.y,
+        start: skill.is_start === 1,
+        locked: false,
       })),
   }));
-  return { subject: toSubject(row), units };
+  const links = db
+    .query<{ a: string; b: string }, [string]>("SELECT a, b FROM skill_links WHERE subject_id = ? ORDER BY created_at, a, b")
+    .all(subjectId)
+    .map((link): [string, string] => [link.a, link.b]);
+  const subject = toSubject(row);
+  if (subject.unlockInOrder) {
+    const locked = skillLocks(units.flatMap((unit) => unit.skills), links);
+    for (const skill of units.flatMap((unit) => unit.skills)) skill.locked = locked.has(skill.id);
+  }
+  return { subject, units, links };
 }

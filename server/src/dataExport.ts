@@ -3,6 +3,7 @@ import {
   isSubjectIcon,
   isSubjectType,
   libraryStates,
+  MAX_LINKS_PER_SKILL,
   MAX_NOTES_LENGTH,
   SUBJECT_COLORS,
   type ExerciseType,
@@ -32,6 +33,7 @@ const MAX_EXERCISES = 20_000;
 interface SubjectRow {
   id: string;
   origin_id: string | null;
+  unlock_in_order: number;
   type: string;
   level: number | null;
   notes: string;
@@ -99,11 +101,17 @@ function exportExercise(row: ExerciseRow): ExportExercise {
 }
 
 function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean, ids: FileIds): ExportSubject {
-  const { units } = getSubject(userId, row.id);
+  const { units, links } = getSubject(userId, row.id);
   const unitOrigins = lineageOf("units", units.map((unit) => unit.id));
   const skillOrigins = lineageOf("skills", units.flatMap((unit) => unit.skills.map((skill) => skill.id)));
+  const subjectFileId = ids.claim(row.origin_id, row.id);
+  const unitFileIds = new Map(units.map((unit) => [unit.id, ids.claim(unitOrigins.get(unit.id) ?? null, unit.id)]));
+  const skillFileIds = new Map(units.flatMap((unit) => unit.skills).map((skill) => [skill.id, ids.claim(skillOrigins.get(skill.id) ?? null, skill.id)]));
+  // Each link is listed once, on its first skill.
+  const linksOf = new Map<string, string[]>();
+  for (const [a, b] of links) linksOf.set(a, [...(linksOf.get(a) ?? []), skillFileIds.get(b)!]);
   return {
-    id: ids.claim(row.origin_id, row.id),
+    id: subjectFileId,
     type: isSubjectType(row.type) ? row.type : "subject",
     // Self-rating and notes are personal, like skill progress: backups only.
     ...(includeProgress ? {
@@ -117,15 +125,18 @@ function exportSubject(userId: string, row: SubjectRow, includeProgress: boolean
     gradientStart: row.gradient_start,
     gradientEnd: row.gradient_end,
     icon: isSubjectIcon(row.icon) ? row.icon : null,
+    unlockInOrder: row.unlock_in_order === 1,
     units: units.map((unit) => ({
-      id: ids.claim(unitOrigins.get(unit.id) ?? null, unit.id),
+      id: unitFileIds.get(unit.id),
       title: unit.title,
       description: unit.description,
       skills: unit.skills.map((skill) => {
         const exported: ExportSkill = {
-          id: ids.claim(skillOrigins.get(skill.id) ?? null, skill.id),
+          id: skillFileIds.get(skill.id),
           title: skill.title,
           description: skill.description,
+          ...(skill.start ? { start: true } : {}),
+          ...(linksOf.has(skill.id) ? { links: linksOf.get(skill.id) } : {}),
           exercises: db
             .query<ExerciseRow, [string]>("SELECT * FROM exercises WHERE skill_id = ? ORDER BY position, created_at")
             .all(skill.id)
@@ -333,6 +344,7 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
     gradientStart: typeof input.gradientStart === "string" && HEX_COLOR.test(input.gradientStart) ? input.gradientStart : "#58cc02",
     gradientEnd: typeof input.gradientEnd === "string" && HEX_COLOR.test(input.gradientEnd) ? input.gradientEnd : "#1cb0f6",
     icon: isSubjectIcon(input.icon) ? input.icon : null,
+    unlockInOrder: input.unlockInOrder === true,
     folder: folderRef(input.folder, folderCount, where),
     position: position(input.position, index),
     archivedAt: date(input.archivedAt),
@@ -351,6 +363,8 @@ function parseSubject(value: unknown, where: string, folderCount = 0, index = 0)
             id: fileId(skill.id),
             title: text(skill.title, `${skillWhere} title`, 120, true),
             description: text(skill.description, `${skillWhere} description`, 500),
+            start: skill.start === true,
+            links: Array.isArray(skill.links) ? skill.links.flatMap((link) => fileId(link) ?? []).slice(0, MAX_LINKS_PER_SKILL) : [],
             exercises: list(skill.exercises, `${skillWhere} exercises`).map((exercise, index) => ({
               id: fileId((exercise as Record<string, unknown>).id),
               ...parseExercise(exercise, `${skillWhere} exercise ${index + 1}`),
@@ -456,11 +470,31 @@ const contentJson = (exercise: ExportExercise) =>
 // "Update mine": the existing subject takes the file's content. Units, skills
 // and exercises with the same lineage are updated in place, so your progress
 // and answers on them stay; ones the file no longer has are removed.
+// The subject's links become exactly the file's: `skillIds` maps file skill
+// ids to the skills they were written to. Links to unknown skills are dropped.
+function writeLinks(subjectId: string, subject: ExportSubject, skillIds: Map<string, string>, now: string) {
+  db.run("DELETE FROM skill_links WHERE subject_id = ?", [subjectId]);
+  const degree = new Map<string, number>();
+  for (const skill of subject.units.flatMap((unit) => unit.skills)) {
+    const from = skill.id ? skillIds.get(skill.id) : undefined;
+    for (const link of skill.links ?? []) {
+      const to = skillIds.get(link);
+      if (!from || !to || from === to) continue;
+      const [a, b] = from < to ? [from, to] : [to, from];
+      if ((degree.get(a) ?? 0) >= MAX_LINKS_PER_SKILL || (degree.get(b) ?? 0) >= MAX_LINKS_PER_SKILL) continue;
+      if (db.query("INSERT OR IGNORE INTO skill_links (subject_id, a, b, created_at) VALUES (?, ?, ?, ?)").run(subjectId, a, b, now).changes === 0) continue;
+      degree.set(a, (degree.get(a) ?? 0) + 1);
+      degree.set(b, (degree.get(b) ?? 0) + 1);
+    }
+  }
+}
+
 function updateFromFile(subjectId: string, subject: ExportSubject) {
   const now = new Date().toISOString();
-  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, updated_at = ? WHERE id = ?", [
-    subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, now, subjectId,
+  db.run("UPDATE subjects SET name = ?, description = ?, color = ?, gradient_start = ?, gradient_end = ?, icon = ?, unlock_in_order = ?, updated_at = ? WHERE id = ?", [
+    subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, subject.unlockInOrder ? 1 : 0, now, subjectId,
   ]);
+  const written = new Map<string, string>();
   type Row = { id: string; lineage: string };
   const units = new Map(db.query<Row, [string]>("SELECT id, COALESCE(origin_id, id) AS lineage FROM units WHERE subject_id = ?").all(subjectId).map((row) => [row.lineage, row.id]));
   const skills = new Map(db.query<Row, [string]>("SELECT skills.id, COALESCE(skills.origin_id, skills.id) AS lineage FROM skills JOIN units ON units.id = skills.unit_id WHERE units.subject_id = ?").all(subjectId).map((row) => [row.lineage, row.id]));
@@ -477,12 +511,13 @@ function updateFromFile(subjectId: string, subject: ExportSubject) {
     kept.units.add(unitId);
     unit.skills.forEach((skill, skillIndex) => {
       let skillId = skill.id ? skills.get(skill.id) : undefined;
-      if (skillId) db.run("UPDATE skills SET unit_id = ?, title = ?, description = ?, position = ? WHERE id = ?", [unitId!, skill.title, skill.description, skillIndex, skillId]);
+      if (skillId) db.run("UPDATE skills SET unit_id = ?, title = ?, description = ?, position = ?, is_start = ? WHERE id = ?", [unitId!, skill.title, skill.description, skillIndex, skill.start ? 1 : 0, skillId]);
       else {
         skillId = crypto.randomUUID();
-        db.run("INSERT INTO skills (id, unit_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [skillId, unitId!, skill.title, skill.description, skillIndex, skill.id ?? null, now]);
+        db.run("INSERT INTO skills (id, unit_id, title, description, position, is_start, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [skillId, unitId!, skill.title, skill.description, skillIndex, skill.start ? 1 : 0, skill.id ?? null, now]);
       }
       kept.skills.add(skillId);
+      if (skill.id) written.set(skill.id, skillId);
       skill.exercises.forEach((exercise, exerciseIndex) => {
         let exerciseId = exercise.id ? exercises.get(exercise.id) : undefined;
         if (exerciseId) {
@@ -503,6 +538,7 @@ function updateFromFile(subjectId: string, subject: ExportSubject) {
   for (const id of exercises.values()) if (!kept.exercises.has(id)) db.run("DELETE FROM exercises WHERE id = ?", [id]);
   for (const id of skills.values()) if (!kept.skills.has(id)) db.run("DELETE FROM skills WHERE id = ?", [id]);
   for (const id of units.values()) if (!kept.units.has(id)) db.run("DELETE FROM units WHERE id = ?", [id]);
+  writeLinks(subjectId, subject, written, now);
 }
 
 // Adds each chosen item as a new copy (remembering the file's ids, so a later
@@ -560,11 +596,12 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
       const folder = subject.folder ?? null;
       const at = subject.position ?? subjectIndex;
       db.run(
-        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, folder_id, position, archived_at, origin_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, folder === null ? destination : folderIds.get(folder)!, folder === null ? offset + at : at, subject.archivedAt ?? null, subject.id ?? null, now, now],
+        "INSERT INTO subjects (id, user_id, type, level, notes, name, description, color, gradient_start, gradient_end, icon, unlock_in_order, folder_id, position, archived_at, origin_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [subjectId, userId, subject.type ?? "subject", subject.level ?? null, subject.notes ?? "", subject.name, subject.description, subject.color, subject.gradientStart, subject.gradientEnd, subject.icon ?? null, subject.unlockInOrder ? 1 : 0, folder === null ? destination : folderIds.get(folder)!, folder === null ? offset + at : at, subject.archivedAt ?? null, subject.id ?? null, now, now],
       );
       const history = subject.levelHistory?.length ? subject.levelHistory : subject.level != null ? [{ level: subject.level, at: now }] : [];
       for (const point of history) recordLevel(userId, subjectId, point.level, point.at);
+      const written = new Map<string, string>();
       subject.units.forEach((unit, unitIndex) => {
         const unitId = crypto.randomUUID();
         db.run("INSERT INTO units (id, subject_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
@@ -572,9 +609,10 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
         ]);
         unit.skills.forEach((skill, skillIndex) => {
           const skillId = crypto.randomUUID();
-          db.run("INSERT INTO skills (id, unit_id, title, description, position, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
-            skillId, unitId, skill.title, skill.description, skillIndex, skill.id ?? null, now,
+          db.run("INSERT INTO skills (id, unit_id, title, description, position, is_start, origin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+            skillId, unitId, skill.title, skill.description, skillIndex, skill.start ? 1 : 0, skill.id ?? null, now,
           ]);
+          if (skill.id) written.set(skill.id, skillId);
           skill.exercises.forEach((exercise, exerciseIndex) => {
             const exerciseId = crypto.randomUUID();
             db.run(
@@ -596,6 +634,7 @@ export function importSubjects(userId: string, subjects: ExportSubject[], folder
           }
         });
       });
+      writeLinks(subjectId, subject, written, now);
     });
   })();
   if (ids.length === 0) throw new Error("Pick at least one item to import");
